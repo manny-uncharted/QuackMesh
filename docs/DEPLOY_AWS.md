@@ -1,0 +1,145 @@
+# QuackMesh AWS Deployment (ECR + ECS Fargate)
+
+This guide shows how to build/push Docker images to Amazon ECR and deploy the QuackMesh server (orchestrator) and client (worker) to ECS Fargate. It supports both local scripts and GitHub Actions workflows.
+
+## Prerequisites
+
+- AWS account, with an ECS cluster created (e.g., `quackmesh`) and VPC/subnets/Security Groups ready.
+- IAM roles:
+  - ECS task execution role (pulls images, writes logs), e.g. `arn:aws:iam::<acct>:role/ecsTaskExecutionRole`.
+  - ECS task role for app (optional), e.g. `arn:aws:iam::<acct>:role/ecsTaskRole`.
+- CloudWatch Logs permissions for the execution role.
+- (Recommended) Application Load Balancer in front of the server service with at least:
+  - Listener for HTTP/HTTPS to container port 8000.
+  - For Flower federated training: either add a listener/target group on 8089, or use an internal service hostname and set `SERVER_HOST` accordingly.
+- AWS CLI v2, Docker, jq, gettext (for `envsubst`) installed if using local scripts.
+
+## Images: Build and Push to ECR
+
+Locally via script:
+
+```bash
+# Set once
+export AWS_ACCOUNT_ID=123456789012
+export AWS_REGION=us-east-1
+
+# Build and push both images (server/client). Creates repos if missing.
+./scripts/aws/ecr_build_push.sh v0.1.0
+```
+
+GitHub Actions:
+
+- Workflow: `.github/workflows/ecr-build-push.yml`
+- Required repo secrets:
+  - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ACCOUNT_ID`, `AWS_REGION`
+- Run the workflow and provide the `version` input (e.g., `v0.1.0`).
+
+## Task Definitions (Templates)
+
+- Server: `scripts/aws/taskdef-server.json`
+- Client: `scripts/aws/taskdef-client.json`
+
+These are templates rendered with environment variables. Key placeholders:
+
+- `${EXECUTION_ROLE_ARN}`, `${TASK_ROLE_ARN}`
+- `${IMAGE_URI}` (e.g., `123.dkr.ecr.us-east-1.amazonaws.com/quackmesh-server:v0.1.0`)
+- Server env: `DATABASE_URL`, `REDIS_URL`, `API_KEY`, `WEB3_PROVIDER_URL`, `DUCKCHAIN_CHAIN_ID`, `DUCK_TOKEN_ADDRESS`, `COMPUTE_MARKETPLACE_ADDRESS`, `TRAINING_POOL_ADDRESS`, `INFERENCE_POOL_ADDRESS`, `HF_TOKEN_ENC_KEY`, `ENABLE_CREATE_ALL`.
+- Client env: `ORCHESTRATOR_API`, `API_KEY`, `PROVIDER_ENDPOINT`, `WEB3_PROVIDER_URL`, `DUCKCHAIN_CHAIN_ID`, `COMPUTE_MARKETPLACE_ADDRESS`, `DUCK_TOKEN_ADDRESS`, `TRAINING_POOL_ADDRESS`, `PROVIDER_PRIVATE_KEY`, `PRICE_PER_HOUR_DUCK`.
+
+Ports:
+
+- Server exposes 8000 (API) and 8089 (Flower server).
+- Client exposes 9000 (worker HTTP server).
+
+Important for Flower: If workers will connect via the same public ALB hostname used for the API, you must configure an ALB listener on 8089 forwarding to the server service target group on container port 8089. Otherwise, set `SERVER_HOST` to an internal hostname reachable inside the VPC and keep `SERVER_PORT=8089`.
+
+## Deploy via Script (ECS)
+
+Use `scripts/aws/ecs_deploy.sh` to render a task definition and update an ECS service.
+
+Required env:
+
+```bash
+export AWS_ACCOUNT_ID=123456789012
+export AWS_REGION=us-east-1
+export CLUSTER=quackmesh
+export SERVER_SERVICE=quackmesh-server
+export CLIENT_SERVICE=quackmesh-client
+export EXECUTION_ROLE_ARN=arn:aws:iam::123456789012:role/ecsTaskExecutionRole
+export TASK_ROLE_ARN=arn:aws:iam::123456789012:role/ecsTaskRole
+# Image tag to deploy
+export VERSION=v0.1.0
+```
+
+Also export any env needed by the selected component template (see above). Then:
+
+```bash
+# For server
+./scripts/aws/ecs_deploy.sh server
+
+# For client
+./scripts/aws/ecs_deploy.sh client
+```
+
+The script will:
+
+- Render `scripts/aws/taskdef-<component>.json` with `envsubst`.
+- Register the task definition.
+- Update the specified ECS service with `--force-new-deployment`.
+
+## Deploy via GitHub Actions
+
+Workflow: `.github/workflows/ecs-deploy.yml`
+
+Repo secrets required:
+
+- AWS: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ACCOUNT_ID`, `AWS_REGION`
+- ECS roles: `ECS_EXECUTION_ROLE_ARN`, `ECS_TASK_ROLE_ARN`
+- Server env: `DATABASE_URL`, `REDIS_URL`, `ORCHESTRATOR_API_KEY`, `WEB3_PROVIDER_URL`, `DUCKCHAIN_CHAIN_ID`, `DUCK_TOKEN_ADDRESS`, `COMPUTE_MARKETPLACE_ADDRESS`, `TRAINING_POOL_ADDRESS`, `INFERENCE_POOL_ADDRESS`, `HF_TOKEN_ENC_KEY`
+- Client env: `ORCHESTRATOR_API`, `PROVIDER_ENDPOINT`, `PROVIDER_PRIVATE_KEY`, `PRICE_PER_HOUR_DUCK`
+
+Run the workflow with inputs:
+
+- `component`: `server` or `client`
+- `version`: image tag (e.g. `v0.1.0`)
+- `cluster`: ECS cluster name (e.g. `quackmesh`)
+- `service`: ECS service name for the selected component
+
+## Networking Notes
+
+- API exposure: map ALB listener 80/443 to target group on container port 8000.
+- Flower server: either expose 8089 on the ALB, or keep it internal and pass `SERVER_HOST` explicitly when starting rounds (see below).
+- Security Groups must allow traffic from clients to the server on 8089.
+
+## Running Flower Federated Training in AWS
+
+1) Ensure the server service is deployed and reachable.
+2) Deploy one or more client services (workers).
+3) Register providers and assign them to the job as usual (or use your local scripts/flows).
+4) Start a round using the orchestrator script and set explicit server host if needed:
+
+```bash
+export ORCHESTRATOR_API="https://your-alb-dns-name/api"
+export API_KEY="..."
+export JOB_ID=1
+export ROUNDS=1
+export STEPS=1
+# If 8089 is not exposed on ALB, set SERVER_HOST to an internal DNS name/IP in the VPC
+# export SERVER_HOST="ip-10-0-1-23.ecs.internal"
+# export SERVER_PORT=8089
+
+./scripts/round_start_flower.sh
+```
+
+## Architecture Choices
+
+- Images: built by `scripts/aws/ecr_build_push.sh` and used by ECS deploy; repos auto-created if missing.
+- Logs: CloudWatch via awslogs. Ensure execution role has permissions to create log streams.
+- Platform: runners/build machines should build images compatible with the target (x86_64/arm64). On Apple Silicon, consider `docker build --platform=linux/amd64` if your Fargate tasks are x86_64.
+
+## Troubleshooting
+
+- 4xx/5xx on deploy: verify IAM roles and region, and that the ECS cluster/services exist.
+- Task stuck/pending: check subnets/Security Groups; confirm ECR image exists and task execution role permissions.
+- Worker cannot reach Flower on 8089: add ALB listener for 8089 or set `SERVER_HOST` to a reachable internal hostname and open SGs accordingly.
+- Orchestrator API 401: ensure `API_KEY` matches server `API_KEY`.

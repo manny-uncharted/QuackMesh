@@ -1,0 +1,85 @@
+name: Deploy to ECS
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Component to deploy (server or client)"
+        required: true
+        default: server
+        type: choice
+        options: [server, client]
+      version:
+        description: "Image tag to deploy (e.g., v0.1.0 or latest)"
+        required: true
+        default: latest
+      cluster:
+        description: "ECS cluster name"
+        required: true
+        default: quackmesh
+      service:
+        description: "ECS service name"
+        required: true
+        default: quackmesh-server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      EXECUTION_ROLE_ARN: ${{ secrets.ECS_EXECUTION_ROLE_ARN }}
+      TASK_ROLE_ARN: ${{ secrets.ECS_TASK_ROLE_ARN }}
+      VERSION: ${{ inputs.version }}
+      CLUSTER: ${{ inputs.cluster }}
+      # Server env
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+      API_KEY: ${{ secrets.ORCHESTRATOR_API_KEY }}
+      WEB3_PROVIDER_URL: ${{ secrets.WEB3_PROVIDER_URL }}
+      DUCKCHAIN_CHAIN_ID: ${{ secrets.DUCKCHAIN_CHAIN_ID }}
+      DUCK_TOKEN_ADDRESS: ${{ secrets.DUCK_TOKEN_ADDRESS }}
+      COMPUTE_MARKETPLACE_ADDRESS: ${{ secrets.COMPUTE_MARKETPLACE_ADDRESS }}
+      TRAINING_POOL_ADDRESS: ${{ secrets.TRAINING_POOL_ADDRESS }}
+      INFERENCE_POOL_ADDRESS: ${{ secrets.INFERENCE_POOL_ADDRESS }}
+      HF_TOKEN_ENC_KEY: ${{ secrets.HF_TOKEN_ENC_KEY }}
+      ENABLE_CREATE_ALL: "0"
+      AWS_ECR_SERVER: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+      # Client env
+      ORCHESTRATOR_API: ${{ secrets.ORCHESTRATOR_API }}
+      PROVIDER_ENDPOINT: ${{ secrets.PROVIDER_ENDPOINT }}
+      PROVIDER_PRIVATE_KEY: ${{ secrets.PROVIDER_PRIVATE_KEY }}
+      PRICE_PER_HOUR_DUCK: ${{ secrets.PRICE_PER_HOUR_DUCK }}
+      # Logs
+      AWSLOGS_GROUP_SERVER: /ecs/quackmesh-server
+      AWSLOGS_GROUP_CLIENT: /ecs/quackmesh-client
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq gettext-base
+
+      - name: Set service env vars
+        run: |
+          if [[ "${{ inputs.component }}" == "server" ]]; then
+            echo "SERVER_SERVICE=${{ inputs.service }}" >> $GITHUB_ENV
+          else
+            echo "CLIENT_SERVICE=${{ inputs.service }}" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy to ECS
+        run: |
+          chmod +x scripts/aws/ecs_deploy.sh
+          scripts/aws/ecs_deploy.sh "${{ inputs.component }}"

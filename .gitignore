@@ -1,0 +1,46 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+.env.local
+.env.*.local
+NOTES
+
+# Node
+node_modules/
+.npm/
+.yarn/
+.dist/
+dist/
+build/
+.cache/
+coverage/
+
+# Docker
+*.log
+logs/
+
+# Python packaging
+*.egg-info/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Hardhat
+artifacts/
+cache/
+contracts/deployments/
+contracts/abi/
+
+# Misc
+.envrc

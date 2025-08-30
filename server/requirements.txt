@@ -1,0 +1,20 @@
+fastapi
+uvicorn[standard]
+pydantic
+SQLAlchemy
+psycopg2-binary
+numpy
+web3
+redis
+paramiko
+python-dotenv
+gunicorn
+alembic
+prometheus-client
+PyJWT
+structlog
+requests
+cryptography
+
+# Flower for federated learning server-side coordination
+flwr

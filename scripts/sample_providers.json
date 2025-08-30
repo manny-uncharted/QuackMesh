@@ -1,0 +1,14 @@
+[
+  {
+    "private_key": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "endpoint": "127.0.0.1:9001",
+    "price_wei": 1000000000000000000,
+    "specs": "{\"cpu\": 8, \"gpu\": 0, \"ram_gb\": 16}"
+  },
+  {
+    "private_key": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "endpoint": "127.0.0.1:9002",
+    "price_wei": 1500000000000000000,
+    "specs": "{\"cpu\": 16, \"gpu\": 1, \"ram_gb\": 32}"
+  }
+]

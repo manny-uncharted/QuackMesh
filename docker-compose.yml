@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-quackmesh}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    env_file:
+      - .quackmesh/test.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-quackmesh}
+      REDIS_URL: redis://redis:6379/0
+      WEB3_PROVIDER_URL: ${WEB3_PROVIDER_URL:-http://localhost:8545}
+      DUCKCHAIN_CHAIN_ID: ${DUCKCHAIN_CHAIN_ID:-1337}
+      DUCK_TOKEN_ADDRESS: ${DUCK_TOKEN_ADDRESS:-0x0000000000000000000000000000000000000000}
+      COMPUTE_MARKETPLACE_ADDRESS: ${COMPUTE_MARKETPLACE_ADDRESS:-0x0000000000000000000000000000000000000000}
+      TRAINING_POOL_ADDRESS: ${TRAINING_POOL_ADDRESS:-0x0000000000000000000000000000000000000000}
+      INFERENCE_POOL_ADDRESS: ${INFERENCE_POOL_ADDRESS:-0x0000000000000000000000000000000000000000}
+      CONTRACTS_ABI_DIR: /app/contracts_abi
+      API_KEY: ${API_KEY:-}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      SENSITIVE_GETS_PER_MINUTE: ${SENSITIVE_GETS_PER_MINUTE:-30}
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_ISSUER: ${JWT_ISSUER:-quackmesh}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-quackmesh}
+      JWT_EXP_MINUTES: ${JWT_EXP_MINUTES:-60}
+      ENABLE_CREATE_ALL: ${ENABLE_CREATE_ALL:-0}
+      # Event-driven orchestration
+      AUTO_ASSIGN_ON_EVENT: ${AUTO_ASSIGN_ON_EVENT:-0}
+      AUTO_ASSIGN_SIZE: ${AUTO_ASSIGN_SIZE:-1}
+      AUTO_START_ROUND_ON_EVENT: ${AUTO_START_ROUND_ON_EVENT:-0}
+      AUTO_ROUND_STEPS: ${AUTO_ROUND_STEPS:-1}
+      # HF credential encryption key (Fernet). For demo use a static value; in prod use Secrets Manager.
+      HF_TOKEN_ENC_KEY: ${HF_TOKEN_ENC_KEY:-}
+    volumes:
+      - ./contracts/abi:/app/contracts_abi:ro
+      - ./server/app:/app/app
+      - ./server/alembic:/app/alembic
+      - ./server/alembic.ini:/app/alembic.ini:ro
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8000:8000"
+      - "8089:8089"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+

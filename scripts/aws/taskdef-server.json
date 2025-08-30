@@ -1,0 +1,42 @@
+{
+  "family": "quackmesh-server",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "server",
+      "image": "${IMAGE_URI}",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 8000, "protocol": "tcp" },
+        { "containerPort": 8089, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "DATABASE_URL", "value": "${DATABASE_URL}" },
+        { "name": "REDIS_URL", "value": "${REDIS_URL}" },
+        { "name": "API_KEY", "value": "${API_KEY}" },
+        { "name": "ENABLE_CREATE_ALL", "value": "${ENABLE_CREATE_ALL}" },
+        { "name": "ALLOWED_ORIGINS", "value": "*" },
+        { "name": "HF_TOKEN_ENC_KEY", "value": "${HF_TOKEN_ENC_KEY}" },
+        { "name": "WEB3_PROVIDER_URL", "value": "${WEB3_PROVIDER_URL}" },
+        { "name": "DUCKCHAIN_CHAIN_ID", "value": "${DUCKCHAIN_CHAIN_ID}" },
+        { "name": "DUCK_TOKEN_ADDRESS", "value": "${DUCK_TOKEN_ADDRESS}" },
+        { "name": "COMPUTE_MARKETPLACE_ADDRESS", "value": "${COMPUTE_MARKETPLACE_ADDRESS}" },
+        { "name": "TRAINING_POOL_ADDRESS", "value": "${TRAINING_POOL_ADDRESS}" },
+        { "name": "INFERENCE_POOL_ADDRESS", "value": "${INFERENCE_POOL_ADDRESS}" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/quackmesh-server",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "server"
+        }
+      }
+    }
+  ]
+}

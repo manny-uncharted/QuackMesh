@@ -1,0 +1,25 @@
+[
+  {
+    "inputs": [
+      { "internalType": "string", "name": "specs", "type": "string" },
+      { "internalType": "uint256", "name": "pricePerHourInDuck", "type": "uint256" }
+    ],
+    "name": "listMachine",
+    "outputs": [
+      { "internalType": "uint256", "name": "machineId", "type": "uint256" }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "machineId", "type": "uint256" },
+      { "indexed": true, "internalType": "address", "name": "provider", "type": "address" },
+      { "indexed": false, "internalType": "string", "name": "specs", "type": "string" },
+      { "indexed": false, "internalType": "uint256", "name": "pricePerHourInDuck", "type": "uint256" }
+    ],
+    "name": "MachineListed",
+    "type": "event"
+  }
+]
