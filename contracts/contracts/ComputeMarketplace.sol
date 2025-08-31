@@ -14,10 +14,18 @@ contract ComputeMarketplace {
     IERC20 public immutable duckToken;
     uint256 public nextMachineId;
     mapping(uint256 => Machine) public machines;
+    uint256 public nextJobId;
 
     event MachineListed(uint256 indexed machineId, address indexed provider, string specs, uint256 pricePerHourInDuck);
     event MachineUnlisted(uint256 indexed machineId);
     event MachineRented(uint256 indexed machineId, address indexed renter, uint256 hoursPaid, uint256 totalPaidDuck);
+    event TrainingJobCreated(
+        uint256 indexed machineId,
+        address indexed renter,
+        uint256 indexed jobId,
+        string modelId,
+        string datasetId
+    );
 
     constructor(IERC20 _duckToken) {
         duckToken = _duckToken;
@@ -43,5 +51,21 @@ contract ComputeMarketplace {
         uint256 total = m.pricePerHourInDuck * hoursPaid;
         require(duckToken.transferFrom(msg.sender, m.provider, total), "DUCK transfer failed");
         emit MachineRented(machineId, msg.sender, hoursPaid, total);
+    }
+
+    function rentMachineWithJob(
+        uint256 machineId,
+        uint256 hoursPaid,
+        string calldata modelId,
+        string calldata datasetId
+    ) external returns (uint256 jobId) {
+        Machine storage m = machines[machineId];
+        require(m.listed, "not listed");
+        uint256 total = m.pricePerHourInDuck * hoursPaid;
+        require(duckToken.transferFrom(msg.sender, m.provider, total), "DUCK transfer failed");
+        emit MachineRented(machineId, msg.sender, hoursPaid, total);
+
+        jobId = ++nextJobId;
+        emit TrainingJobCreated(machineId, msg.sender, jobId, modelId, datasetId);
     }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAccount } from 'wagmi'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { 
@@ -18,6 +18,7 @@ import {
   MapPin,
   Wifi
 } from 'lucide-react'
+import { RentModal, type RentMode } from '@/components/marketplace/rent-modal'
 
 interface MarketplaceNode {
   machine_id: number
@@ -42,6 +43,7 @@ interface MarketplaceNode {
 export default function MarketplacePage() {
   const { isConnected } = useAccount()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [nodes, setNodes] = useState<MarketplaceNode[]>([])
   const [filteredNodes, setFilteredNodes] = useState<MarketplaceNode[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,6 +55,9 @@ export default function MarketplacePage() {
     maxPrice: '',
     availability: 'available'
   })
+  const [rentOpen, setRentOpen] = useState(false)
+  const [selectedNode, setSelectedNode] = useState<MarketplaceNode | null>(null)
+  const defaultMode: RentMode = (searchParams.get('type') === 'compute' ? 'compute' : 'train')
 
   useEffect(() => {
     if (!isConnected) {
@@ -147,8 +152,11 @@ export default function MarketplacePage() {
   }, [nodes, searchTerm, filters])
 
   const handleRentNode = (nodeId: number) => {
-    console.log(`Renting node ${nodeId}`)
-    // TODO: Implement rental flow with smart contract interaction
+    const n = filteredNodes.find(n => n.machine_id === nodeId)
+    if (n) {
+      setSelectedNode(n)
+      setRentOpen(true)
+    }
   }
 
   const getAvailabilityColor = (availability: string) => {
@@ -375,6 +383,13 @@ export default function MarketplacePage() {
             <p className="text-gray-600">Try adjusting your search criteria or filters.</p>
           </div>
         )}
+
+        <RentModal
+          open={rentOpen}
+          onClose={() => setRentOpen(false)}
+          node={selectedNode ? { machine_id: selectedNode.machine_id, price_per_hour: selectedNode.price_per_hour, name: selectedNode.name } : null}
+          defaultMode={defaultMode}
+        />
       </div>
     </div>
   )

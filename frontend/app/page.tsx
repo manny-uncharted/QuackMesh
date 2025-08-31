@@ -7,6 +7,7 @@ import { NetworkAnimation } from '@/components/network-animation'
 import { LiveStats } from '@/components/live-stats'
 import { useAccount } from 'wagmi'
 import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { Download, Shield, DollarSign, Play, ArrowRight } from 'lucide-react'
 import { Footer } from '@/components/footer'
 
@@ -14,9 +15,28 @@ export default function HomePage() {
   const { isConnected } = useAccount()
   const router = useRouter()
 
+  // Redirect first-time visitors straight to onboarding
+  useEffect(() => {
+    try {
+      const onboarded = typeof window !== 'undefined' && window.localStorage.getItem('userOnboarded') === 'true'
+      if (!onboarded) {
+        router.replace('/onboarding')
+      }
+    } catch {}
+  }, [router])
+
   const handleConnectAndRedirect = () => {
     if (isConnected) {
-      router.push('/dashboard')
+      try {
+        const onboarded = typeof window !== 'undefined' && window.localStorage.getItem('userOnboarded') === 'true'
+        if (onboarded) {
+          router.push('/dashboard')
+        } else {
+          router.push('/onboarding')
+        }
+      } catch {
+        router.push('/dashboard')
+      }
     }
   }
 

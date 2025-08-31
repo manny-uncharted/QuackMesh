@@ -34,7 +34,7 @@ export default function DashboardPage() {
     trainingJobs, 
     claimRewards,
     updateNodeStatus,
-    setComputeNodes,
+    handleNodeUpdate,
   } = useAppStore()
 
   const [logsOpen, setLogsOpen] = useState(false)
@@ -51,17 +51,20 @@ export default function DashboardPage() {
   // Real-time nodes WebSocket
   useEffect(() => {
     if (!isConnected) return
-    const disconnect = connectNodesWS(setComputeNodes)
+    const disconnect = connectNodesWS(handleNodeUpdate)
     return () => {
       try { disconnect?.() } catch {}
     }
-  }, [isConnected, setComputeNodes])
+  }, [isConnected, handleNodeUpdate])
 
   // Logs WebSocket when modal open
   useEffect(() => {
     if (!logsOpen || !activeLogNodeId) return
     const mid = parseInt(activeLogNodeId, 10)
-    const stop = connectLogsWS(mid, setLogs)
+    const stop = connectLogsWS(mid, (entry) => {
+      const line = `[${new Date(entry.timestamp).toLocaleTimeString()}] ${entry.level}: ${entry.message}`
+      setLogs((prev) => [...prev, line])
+    })
     setDisconnectLogs(() => stop)
     return () => {
       try { stop?.() } catch {}

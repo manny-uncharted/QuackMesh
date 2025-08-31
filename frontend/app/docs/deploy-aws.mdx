@@ -1,4 +1,4 @@
-# QuackMesh AWS Deployment (ECR + ECS Fargate)
+add# QuackMesh AWS Deployment (ECR + ECS Fargate)
 
 This guide shows how to build/push Docker images to Amazon ECR and deploy the QuackMesh server (orchestrator) and client (worker) to ECS Fargate. It supports both local scripts and GitHub Actions workflows.
 
@@ -113,10 +113,10 @@ Run the workflow with inputs:
 
 ## Running Flower Federated Training in AWS
 
-1) Ensure the server service is deployed and reachable.
-2) Deploy one or more client services (workers).
-3) Register providers and assign them to the job as usual (or use your local scripts/flows).
-4) Start a round using the orchestrator script and set explicit server host if needed:
+1. Ensure the server service is deployed and reachable.
+2. Deploy one or more client services (workers).
+3. Register providers and assign them to the job as usual (or use your local scripts/flows).
+4. Start a round using the orchestrator script and set explicit server host if needed:
 
 ```bash
 export ORCHESTRATOR_API="https://your-alb-dns-name/api"

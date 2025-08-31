@@ -1,9 +1,5 @@
 const withMDX = require('@next/mdx')({
   extension: /\.mdx?$/,
-  options: {
-    // Use the MDX React provider at runtime
-    providerImportSource: '@mdx-js/react',
-  },
 });
 
 /** @type {import('next').NextConfig} */

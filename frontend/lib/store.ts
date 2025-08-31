@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { NodeUpdate } from './realtime'
 
 interface NetworkStats {
   totalDuckEarned: number
@@ -52,6 +53,7 @@ interface AppState {
   updateNodeStatus: (nodeId: string, status: ComputeNode['status']) => void
   claimRewards: () => void
   setComputeNodes: (nodes: ComputeNode[]) => void
+  handleNodeUpdate: (update: NodeUpdate) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -172,6 +174,49 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeNodes: nodes.filter(n => n.status !== 'offline').length,
       },
     }))
+  },
+
+  handleNodeUpdate: (update) => {
+    set((state) => {
+      const id = String(update.machine_id)
+      const existing = state.computeNodes.find(n => n.id === id)
+      const updatedNodes = existing
+        ? state.computeNodes.map((n) =>
+            n.id === id
+              ? {
+                  ...n,
+                  status: (['online', 'offline', 'training'] as const).includes(update.status as any)
+                    ? (update.status as ComputeNode['status'])
+                    : n.status,
+                  cpu: Math.round(update.usage.cpu_percent),
+                  ram: Math.round(update.usage.memory_percent),
+                  gpu: Math.round(update.usage.gpu_percent ?? 0),
+                }
+              : n
+          )
+        : [
+            ...state.computeNodes,
+            {
+              id,
+              name: `Node #${id}`,
+              status: (['online', 'offline', 'training'] as const).includes(update.status as any)
+                ? (update.status as ComputeNode['status'])
+                : 'online',
+              cpu: Math.round(update.usage.cpu_percent),
+              gpu: Math.round(update.usage.gpu_percent ?? 0),
+              ram: Math.round(update.usage.memory_percent),
+              earningsRate: 5,
+            },
+          ]
+
+      return {
+        computeNodes: updatedNodes,
+        userStats: {
+          ...state.userStats,
+          activeNodes: updatedNodes.filter(n => n.status !== 'offline').length,
+        },
+      }
+    })
   },
   
   claimRewards: () => {

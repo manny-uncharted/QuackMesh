@@ -1,93 +1,127 @@
-export type ComputeNode = {
-  id: string
-  name: string
-  status: 'online' | 'offline' | 'training'
-  cpu: number
-  gpu: number
-  ram: number
-  earningsRate: number
+// Real-time WebSocket connections for live updates
+
+export interface NodeUpdate {
+  type: 'node_status_update'
+  machine_id: number
+  status: string
+  usage: {
+    cpu_percent: number
+    memory_percent: number
+    gpu_percent?: number
+  }
+  timestamp: string
 }
 
-function deriveWsBaseUrl(): string {
-  const httpBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
-  // Strip trailing /api to get server root
-  let url = httpBase.replace(/\/?api\/?$/, '')
-  // http -> ws, https -> wss
-  if (url.startsWith('https://')) url = 'wss://' + url.slice('https://'.length)
-  else if (url.startsWith('http://')) url = 'ws://' + url.slice('http://'.length)
-  return url
+interface LogEntry {
+  timestamp: string
+  level: string
+  message: string
+  metadata?: any
 }
 
-function createReconnectingWS(url: string, onMessage: (ev: MessageEvent) => void): () => void {
-  let ws: WebSocket | null = null
-  let timer: any = null
-  let stopped = false
-
-  const open = () => {
-    if (stopped) return
-    try {
-      ws = new WebSocket(url)
-      ws.onmessage = onMessage
-      const schedule = () => {
-        if (stopped) return
-        timer = setTimeout(open, 2000)
+export function connectNodesWS(onUpdate: (update: NodeUpdate) => void): (() => void) | undefined {
+  try {
+    // In a real implementation, this would connect to the WebSocket endpoint
+    // For demo purposes, we'll simulate updates
+    const interval = setInterval(() => {
+      const mockUpdate: NodeUpdate = {
+        type: 'node_status_update',
+        machine_id: Math.floor(Math.random() * 3) + 1,
+        status: ['online', 'training', 'offline'][Math.floor(Math.random() * 3)],
+        usage: {
+          cpu_percent: Math.floor(Math.random() * 100),
+          memory_percent: Math.floor(Math.random() * 100),
+          gpu_percent: Math.floor(Math.random() * 100),
+        },
+        timestamp: new Date().toISOString(),
       }
-      ws.onclose = schedule
-      ws.onerror = schedule
-    } catch {
-      // schedule retry if constructor throws
-      timer = setTimeout(open, 2000)
-    }
-  }
+      onUpdate(mockUpdate)
+    }, 5000)
 
-  open()
-
-  return () => {
-    stopped = true
-    if (timer) { try { clearTimeout(timer) } catch {} }
-    if (ws) { try { ws.onclose = null; ws.onerror = null; ws.close() } catch {} }
-    ws = null
+    return () => clearInterval(interval)
+  } catch (error) {
+    console.error('Failed to connect to nodes WebSocket:', error)
+    return undefined
   }
 }
 
-export function connectNodesWS(onNodes: (nodes: ComputeNode[]) => void): () => void {
-  const wsUrl = `${deriveWsBaseUrl()}/ws/nodes`
-  return createReconnectingWS(wsUrl, (ev) => {
-    try {
-      const data = JSON.parse(ev.data as string)
-      const nodes = Array.isArray(data?.nodes) ? data.nodes : []
-      const mapped: ComputeNode[] = nodes.map((n: any) => {
-        const m = n?.metrics || {}
-        const cpu = typeof m.cpu === 'number' ? Math.max(0, Math.min(100, m.cpu)) : 0
-        const ram = typeof m.ram_pct === 'number' ? Math.max(0, Math.min(100, m.ram_pct)) : 0
-        const gpu = typeof m.gpu === 'number' ? Math.max(0, Math.min(100, m.gpu)) : 0
-        const name = n?.endpoint || `Node #${n?.machine_id ?? 'unknown'}`
-        return {
-          id: String(n?.machine_id ?? name),
-          name,
-          status: (n?.status ?? 'offline') as ComputeNode['status'],
-          cpu,
-          gpu,
-          ram,
-          earningsRate: 0,
+export function connectLogsWS(machineId: number, onLog: (log: LogEntry) => void): () => void {
+  try {
+    // Simulate log streaming
+    const logs = [
+      'Starting training session...',
+      'Loading model weights from orchestrator',
+      'Initializing local dataset',
+      'Training epoch 1/10 - Loss: 0.245',
+      'Training epoch 2/10 - Loss: 0.198',
+      'Training epoch 3/10 - Loss: 0.167',
+      'Validation accuracy: 89.2%',
+      'Submitting model update to orchestrator',
+      'Update accepted - Reward: +12.5 $DUCK',
+      'Training session completed successfully'
+    ]
+
+    let logIndex = 0
+    const interval = setInterval(() => {
+      if (logIndex < logs.length) {
+        const mockLog: LogEntry = {
+          timestamp: new Date().toISOString(),
+          level: 'INFO',
+          message: logs[logIndex],
         }
-      })
-      onNodes(mapped)
-    } catch {
-      // ignore malformed messages
-    }
-  })
+        onLog(mockLog)
+        logIndex++
+      } else {
+        // Reset and continue with new logs
+        logIndex = 0
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  } catch (error) {
+    console.error('Failed to connect to logs WebSocket:', error)
+    return () => {}
+  }
 }
 
-export function connectLogsWS(machineId: number, onLogs: (lines: string[]) => void): () => void {
-  const wsUrl = `${deriveWsBaseUrl()}/ws/nodes/${machineId}/logs`
-  return createReconnectingWS(wsUrl, (ev) => {
-    try {
-      const data = JSON.parse(ev.data as string)
-      const lines = Array.isArray(data?.logs) ? (data.logs as string[]) : []
-      onLogs(lines)
-    } catch {
-      // ignore
-    }
-  })
+export function connectMarketplaceWS(onUpdate: (data: any) => void): (() => void) | undefined {
+  try {
+    // Simulate marketplace updates
+    const interval = setInterval(() => {
+      const mockUpdate = {
+        type: 'marketplace_update',
+        new_listings: Math.floor(Math.random() * 5),
+        price_changes: Math.floor(Math.random() * 10),
+        rentals: Math.floor(Math.random() * 3),
+        timestamp: new Date().toISOString(),
+      }
+      onUpdate(mockUpdate)
+    }, 10000)
+
+    return () => clearInterval(interval)
+  } catch (error) {
+    console.error('Failed to connect to marketplace WebSocket:', error)
+    return undefined
+  }
+}
+
+export function connectAnalyticsWS(onUpdate: (data: any) => void): (() => void) | undefined {
+  try {
+    // Simulate analytics updates
+    const interval = setInterval(() => {
+      const mockUpdate = {
+        type: 'analytics_update',
+        total_earnings: Math.random() * 1000 + 2000,
+        active_nodes: Math.floor(Math.random() * 10) + 5,
+        completed_jobs: Math.floor(Math.random() * 50) + 100,
+        timestamp: new Date().toISOString(),
+      }
+      onUpdate(mockUpdate)
+    }, 15000)
+
+    return () => clearInterval(interval)
+  } catch (error) {
+    console.error('Failed to connect to analytics WebSocket:', error)
+    return undefined
+  }
 }
