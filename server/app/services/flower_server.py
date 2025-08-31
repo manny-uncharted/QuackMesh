@@ -1,5 +1,6 @@
 import os
 import threading
+import multiprocessing as mp
 import logging
 from typing import List, Optional, Dict, Any
 
@@ -12,7 +13,7 @@ from ..models import ModelArtifact
 logger = logging.getLogger("quackmesh.flower")
 
 # In-memory registry of running Flower servers by job_id
-_running_servers: Dict[int, threading.Thread] = {}
+_running_servers: Dict[int, mp.Process] = {}
 
 
 def _to_parameters(weights: List[List[float]]) -> fl.common.Parameters:
@@ -27,7 +28,14 @@ def _from_parameters(params: fl.common.Parameters) -> List[List[float]]:
 
 class _Strategy(fl.server.strategy.FedAvg):
     def __init__(self, job_id: int, initial_params: Optional[fl.common.Parameters]):
-        super().__init__()
+        # Configure for single-client operation by default
+        super().__init__(
+            fraction_fit=1.0,
+            min_fit_clients=1,
+            min_available_clients=1,
+            fraction_evaluate=0.0,
+            min_evaluate_clients=0,
+        )
         self.job_id = job_id
         self.initial_params = initial_params
 
@@ -80,12 +88,12 @@ def start_flower_server(job_id: int, host: str = "0.0.0.0", port: int = 8089, ro
         fl.server.start_server(server_address=address, config=fl.server.ServerConfig(num_rounds=rounds), strategy=strategy)
         logger.info("flower.server.stop", extra={"job_id": job_id})
 
-    th = threading.Thread(target=_run, daemon=True, name=f"flower-server-{job_id}")
-    _running_servers[job_id] = th
-    th.start()
+    proc = mp.Process(target=_run, daemon=True, name=f"flower-server-{job_id}")
+    _running_servers[job_id] = proc
+    proc.start()
     return {"status": "started", "host": host, "port": port}
 
 
 def is_flower_running(job_id: int) -> bool:
-    th = _running_servers.get(job_id)
-    return bool(th and th.is_alive())
+    proc = _running_servers.get(job_id)
+    return bool(proc and proc.is_alive())

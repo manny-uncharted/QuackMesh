@@ -116,7 +116,7 @@ def node_heartbeat(heartbeat: NodeHeartbeatRequest, _auth: dict = Depends(requir
             timestamp=datetime.utcnow(),
             status=heartbeat.status,
             usage=heartbeat.usage,
-            metadata=heartbeat.metadata
+            metadata_=heartbeat.metadata_
         )
         session.add(new_heartbeat)
         
@@ -157,7 +157,7 @@ def get_node_logs(machine_id: int, limit: int = 100, _auth: dict = Depends(requi
                     "timestamp": log.timestamp,
                     "level": log.level,
                     "message": log.message,
-                    "metadata": log.metadata
+                    "metadata": log.metadata_
                 }
                 for log in logs
             ]
@@ -181,7 +181,7 @@ def control_node(machine_id: int, control: NodeControlRequest, _auth: dict = Dep
             timestamp=datetime.utcnow(),
             level="INFO",
             message=f"Control command received: {control.action}",
-            metadata={"command": control.action, "params": control.params}
+            metadata_={"command": control.action, "params": control.params}
         )
         session.add(log_entry)
         

@@ -9,6 +9,7 @@ import psutil
 from typing import List, Optional
 from collections import deque
 import threading
+import multiprocessing as mp
 import time
 import torch
 from torch import nn
@@ -381,7 +382,7 @@ def create_app() -> FastAPI:
                     f = Fernet(base64.urlsafe_b64encode(HF_TOKEN_DEC_KEY.encode("utf-8")))
                 token_enc = base64.b64decode(hf_meta["token_enc_b64"])  # bytes
                 hf_token = f.decrypt(token_enc).decode("utf-8")
-            logger.info("push_hf.token.decrypt.ok")
+                logger.info("push_hf.token.decrypt.ok")
             except Exception:
                 raise HTTPException(status_code=500, detail="Failed to decrypt HF token")
 
@@ -559,9 +560,9 @@ def create_app() -> FastAPI:
                 except Exception:
                     logger.exception("flower.client.fail", extra={"job_id": task.job_id})
 
-            th = threading.Thread(target=_run, daemon=True, name=f"flower-client-{task.job_id}")
-            th.start()
-            return {"started": True}
+            proc = mp.Process(target=_run, daemon=True, name=f"flower-client-{task.job_id}")
+            proc.start()
+            return {"started": True, "pid": proc.pid}
         except HTTPException:
             raise
         except Exception as e:

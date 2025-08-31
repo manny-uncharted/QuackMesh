@@ -29,8 +29,10 @@ export interface ComputeMarketplaceInterface extends Interface {
       | "duckToken"
       | "listMachine"
       | "machines"
+      | "nextJobId"
       | "nextMachineId"
       | "rentMachine"
+      | "rentMachineWithJob"
       | "unlistMachine"
   ): FunctionFragment;
 
@@ -39,6 +41,7 @@ export interface ComputeMarketplaceInterface extends Interface {
       | "MachineListed"
       | "MachineRented"
       | "MachineUnlisted"
+      | "TrainingJobCreated"
   ): EventFragment;
 
   encodeFunctionData(functionFragment: "duckToken", values?: undefined): string;
@@ -50,6 +53,7 @@ export interface ComputeMarketplaceInterface extends Interface {
     functionFragment: "machines",
     values: [BigNumberish]
   ): string;
+  encodeFunctionData(functionFragment: "nextJobId", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "nextMachineId",
     values?: undefined
@@ -57,6 +61,10 @@ export interface ComputeMarketplaceInterface extends Interface {
   encodeFunctionData(
     functionFragment: "rentMachine",
     values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "rentMachineWithJob",
+    values: [BigNumberish, BigNumberish, string, string]
   ): string;
   encodeFunctionData(
     functionFragment: "unlistMachine",
@@ -69,12 +77,17 @@ export interface ComputeMarketplaceInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "machines", data: BytesLike): Result;
+  decodeFunctionResult(functionFragment: "nextJobId", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "nextMachineId",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "rentMachine",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "rentMachineWithJob",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -138,6 +151,34 @@ export namespace MachineUnlistedEvent {
   export type OutputTuple = [machineId: bigint];
   export interface OutputObject {
     machineId: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace TrainingJobCreatedEvent {
+  export type InputTuple = [
+    machineId: BigNumberish,
+    renter: AddressLike,
+    jobId: BigNumberish,
+    modelId: string,
+    datasetId: string
+  ];
+  export type OutputTuple = [
+    machineId: bigint,
+    renter: string,
+    jobId: bigint,
+    modelId: string,
+    datasetId: string
+  ];
+  export interface OutputObject {
+    machineId: bigint;
+    renter: string;
+    jobId: bigint;
+    modelId: string;
+    datasetId: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -209,11 +250,24 @@ export interface ComputeMarketplace extends BaseContract {
     "view"
   >;
 
+  nextJobId: TypedContractMethod<[], [bigint], "view">;
+
   nextMachineId: TypedContractMethod<[], [bigint], "view">;
 
   rentMachine: TypedContractMethod<
     [machineId: BigNumberish, hoursPaid: BigNumberish],
     [void],
+    "nonpayable"
+  >;
+
+  rentMachineWithJob: TypedContractMethod<
+    [
+      machineId: BigNumberish,
+      hoursPaid: BigNumberish,
+      modelId: string,
+      datasetId: string
+    ],
+    [bigint],
     "nonpayable"
   >;
 
@@ -252,6 +306,9 @@ export interface ComputeMarketplace extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "nextJobId"
+  ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
     nameOrSignature: "nextMachineId"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -259,6 +316,18 @@ export interface ComputeMarketplace extends BaseContract {
   ): TypedContractMethod<
     [machineId: BigNumberish, hoursPaid: BigNumberish],
     [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "rentMachineWithJob"
+  ): TypedContractMethod<
+    [
+      machineId: BigNumberish,
+      hoursPaid: BigNumberish,
+      modelId: string,
+      datasetId: string
+    ],
+    [bigint],
     "nonpayable"
   >;
   getFunction(
@@ -285,6 +354,13 @@ export interface ComputeMarketplace extends BaseContract {
     MachineUnlistedEvent.InputTuple,
     MachineUnlistedEvent.OutputTuple,
     MachineUnlistedEvent.OutputObject
+  >;
+  getEvent(
+    key: "TrainingJobCreated"
+  ): TypedContractEvent<
+    TrainingJobCreatedEvent.InputTuple,
+    TrainingJobCreatedEvent.OutputTuple,
+    TrainingJobCreatedEvent.OutputObject
   >;
 
   filters: {
@@ -319,6 +395,17 @@ export interface ComputeMarketplace extends BaseContract {
       MachineUnlistedEvent.InputTuple,
       MachineUnlistedEvent.OutputTuple,
       MachineUnlistedEvent.OutputObject
+    >;
+
+    "TrainingJobCreated(uint256,address,uint256,string,string)": TypedContractEvent<
+      TrainingJobCreatedEvent.InputTuple,
+      TrainingJobCreatedEvent.OutputTuple,
+      TrainingJobCreatedEvent.OutputObject
+    >;
+    TrainingJobCreated: TypedContractEvent<
+      TrainingJobCreatedEvent.InputTuple,
+      TrainingJobCreatedEvent.OutputTuple,
+      TrainingJobCreatedEvent.OutputObject
     >;
   };
 }

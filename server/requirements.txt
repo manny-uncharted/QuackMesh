@@ -15,6 +15,7 @@ PyJWT
 structlog
 requests
 cryptography
+python-multipart
 
 # Flower for federated learning server-side coordination
 flwr

@@ -70,7 +70,7 @@ class NodeHeartbeat(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="online")
     usage = Column(JSON, nullable=True)  # CPU, GPU, RAM usage
-    metadata = Column(JSON, nullable=True)
+    metadata_ = Column(JSON, nullable=True)
 
 class NodeLog(Base):
     __tablename__ = "node_logs"
@@ -79,7 +79,7 @@ class NodeLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     level = Column(String, default="INFO")
     message = Column(String)
-    metadata = Column(JSON, nullable=True)
+    metadata_ = Column(JSON, nullable=True)
 
 class Dataset(Base):
     __tablename__ = "datasets"
@@ -129,14 +129,3 @@ class RentalHistory(Base):
     rental_end = Column(DateTime)
     status = Column(String, default="active")  # active, completed, cancelled
 
-
-class Dataset(Base):
-    __tablename__ = "datasets"
-    id = Column(Integer, primary_key=True)
-    owner_address = Column(String, index=True)
-    name = Column(String, nullable=False)
-    description = Column(String, nullable=True)
-    uri = Column(String, nullable=False)  # e.g., HF repo, IPFS link, or storage URL
-    size_bytes = Column(Integer, nullable=True)
-    fmt = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)

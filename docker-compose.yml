@@ -63,6 +63,53 @@ services:
       timeout: 5s
       retries: 10
 
+  worker1:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    env_file:
+      - .quackmesh/test.env
+    environment:
+      ORCHESTRATOR_API: http://server:8000/api
+      WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
+      DATASET: ${DATASET:-FAKE}
+    command: ["worker", "--host", "0.0.0.0", "--port", "9001"]
+    depends_on:
+      - server
+    ports:
+      - "9001:9001"
+
+  worker2:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    env_file:
+      - .quackmesh/test.env
+    environment:
+      ORCHESTRATOR_API: http://server:8000/api
+      WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
+      DATASET: ${DATASET:-FAKE}
+    command: ["worker", "--host", "0.0.0.0", "--port", "9002"]
+    depends_on:
+      - server
+    ports:
+      - "9002:9002"
+
+  tools:
+    image: alpine:3.19
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    env_file:
+      - .quackmesh/test.env
+    environment:
+      ORCHESTRATOR_API: http://server:8000/api
+    entrypoint: ["sh", "-c"]
+    command: ["apk add --no-cache bash curl jq && sleep infinity"]
+    depends_on:
+      - server
+      - worker1
+
 volumes:
   pgdata:
 

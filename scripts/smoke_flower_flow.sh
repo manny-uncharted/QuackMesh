@@ -57,8 +57,33 @@ echo "[2/4] Registering provider + assigning cluster (endpoint=$ENDPOINT)..."
 echo "[3/4] Starting Flower round(s): rounds=$ROUNDS steps=$STEPS ..."
 "$DIR/round_start_flower.sh" "$JOB_ID" "$ROUNDS" "$STEPS"
 
-# 4) Fetch aggregated model
-echo "[4/4] Fetching aggregated model..."
-curl -sS "$ORCH/job/$JOB_ID/model" | jq .
+# 4) Fetch aggregated model (poll until non-empty or timeout)
+echo "[4/4] Waiting for aggregated model..."
+WAIT_S="${WAIT_S:-40}"
+deadline=$((WAIT_S + $(date +%s)))
+attempt=0
+final=""
+while true; do
+  attempt=$((attempt + 1))
+  resp=$(curl -sS "$ORCH/job/$JOB_ID/model" || true)
+  if echo "$resp" | jq . >/dev/null 2>&1; then
+    n=$(echo "$resp" | jq '.weights | length')
+    echo "attempt=$attempt weights_len=$n"
+    if [ "$n" -gt 0 ]; then
+      final="$resp"
+      break
+    fi
+  else
+    echo "Model endpoint returned non-JSON: $resp" >&2
+  fi
+  now=$(date +%s)
+  if [ "$now" -ge "$deadline" ]; then
+    echo "Timed out waiting for non-empty aggregated weights after ${WAIT_S}s" >&2
+    final="$resp"
+    break
+  fi
+  sleep 2
+done
+echo "$final" | jq .
 
 echo "Done. Check orchestrator logs for round.flower.* and worker logs for flower.client.* markers."

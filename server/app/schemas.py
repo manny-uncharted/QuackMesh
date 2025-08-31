@@ -109,7 +109,7 @@ class NodeHeartbeatRequest(BaseModel):
     machine_id: int
     status: str = "online"
     usage: Optional[Dict] = None
-    metadata: Optional[Dict] = None
+    metadata_: Optional[Dict] = None
 
 class NodeControlRequest(BaseModel):
     action: str  # restart, stop, terminate
