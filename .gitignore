@@ -12,6 +12,7 @@ venv/
 .env.local
 .env.*.local
 NOTES
+test.env
 
 # Node
 node_modules/
