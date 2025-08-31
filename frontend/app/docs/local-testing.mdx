@@ -1,0 +1,222 @@
+# QuackMesh - Local Testing Guide
+
+This guide shows how to run the orchestrator, start provider workers, and exercise the training flow locally. Copy/paste commands are provided.
+
+## Prerequisites
+- Docker and Docker Compose
+- Python 3.11 with pip (for client CLI and worker) and jq for pretty JSON
+- Environment variables: set an API key for write endpoints
+
+```bash
+# From repo root
+export API_KEY=admin-test-abc123
+export ORCHESTRATOR_API=http://localhost:8000/api
+```
+
+## 1) Start the orchestrator stack
+```bash
+docker compose build server
+# Optionally set CREATE_ALL to auto-create tables
+export ENABLE_CREATE_ALL=1
+# Optional: enable event-driven orchestration (see section 4)
+export AUTO_ASSIGN_ON_EVENT=1
+export AUTO_ASSIGN_SIZE=2
+export AUTO_START_ROUND_ON_EVENT=1
+export AUTO_ROUND_STEPS=1
+
+docker compose up -d db redis server
+# Wait for ready
+curl -s http://localhost:8000/readyz | jq .
+```
+
+## 2) Quick demo (script): two local workers, assign, train
+This starts two local workers on ports 9001/9002, registers providers, creates a job, assigns, starts a round, and fetches the model.
+
+```bash
+# Install client deps (host)
+pip install -r client/requirements.txt
+
+# Run end-to-end demo
+bash scripts/demo_e2e_local.sh
+```
+
+Check worker logs: `/tmp/qm_worker_900{1,2}.log`
+
+## 3) Manual workflow (no chain)
+Run the same flow step-by-step.
+
+```bash
+# 3.1 Start workers (host)
+export PYTHONPATH="$(pwd)/client:${PYTHONPATH:-}"
+python -m quackmesh_client worker --host 127.0.0.1 --port 9001 >/tmp/qm_worker_9001.log 2>&1 &
+python -m quackmesh_client worker --host 127.0.0.1 --port 9002 >/tmp/qm_worker_9002.log 2>&1 &
+
+# 3.2 Register providers (machine_id 1 and 2)
+curl -sS -X POST "$ORCHESTRATOR_API/provider/register" -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+  -d '{"machine_id":1, "provider_address":"0xProvider1", "specs":"{}", "endpoint":"127.0.0.1:9001"}' | jq .
+curl -sS -X POST "$ORCHESTRATOR_API/provider/register" -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+  -d '{"machine_id":2, "provider_address":"0xProvider2", "specs":"{}", "endpoint":"127.0.0.1:9002"}' | jq .
+
+# 3.3 Create a job via orchestrator
+JOB_ID=$(curl -sS -X POST "$ORCHESTRATOR_API/job/" -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+  -d '{"model_arch":"demo","initial_weights":[],"reward_pool_duck":0}' | jq -r .job_id)
+
+echo "Job ID: $JOB_ID"
+
+# 3.4 Assign providers to the job
+curl -sS -X POST "$ORCHESTRATOR_API/cluster/assign" -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"job_id\":$JOB_ID, \"machine_ids\":[1,2]}" | jq .
+
+# 3.5 Trigger a training round
+curl -sS -X POST "$ORCHESTRATOR_API/round/$JOB_ID/start" -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+  -d '{"steps":1,"timeout_s":20}' | jq .
+
+# 3.6 Get the aggregated model
+curl -sS "$ORCHESTRATOR_API/job/$JOB_ID/model" | jq .
+```
+
+## 4) On-chain requester + event-driven orchestration (optional)
+The orchestrator can mirror jobs created on-chain and auto-assign/auto-start training.
+
+1) Ensure `AUTO_*` env vars are enabled before starting the server container:
+```bash
+export AUTO_ASSIGN_ON_EVENT=1
+export AUTO_ASSIGN_SIZE=2
+export AUTO_START_ROUND_ON_EVENT=1
+export AUTO_ROUND_STEPS=1
+# Restart server if already running
+docker compose up -d server
+```
+
+2) Register providers (same as step 3.2).
+
+3) Create a training job on-chain using the client requester mode:
+```bash
+# RPC/Contracts env
+echo "Set your chain RPC and contract addresses appropriately"
+export WEB3_PROVIDER_URL=http://localhost:8545
+export DUCKCHAIN_CHAIN_ID=1337
+export TRAINING_POOL_ADDRESS=0xYourTrainingPool
+export DUCK_TOKEN_ADDRESS=0xYourDuckToken
+export REQUESTER_PRIVATE_KEY=0xYourPrivateKey
+
+# Create the job; parse on-chain job id from receipt
+python -m quackmesh_client requester \
+  --model-hash 0x000000000000000000000000000000000000000000000000000000000000beef \
+  --reward-duck 100.0
+```
+
+The orchestrator event listener will:
+- Create a `Job` and `ModelArtifact` in the DB.
+- Auto-assign up to `AUTO_ASSIGN_SIZE` registered providers.
+- Auto-call each provider `POST /task/train` with `AUTO_ROUND_STEPS`.
+
+## 5) Provisioning over SSH/Docker (optional)
+You can ask the orchestrator to start worker containers on remote hosts and set the cluster nodes:
+```bash
+curl -X POST "$ORCHESTRATOR_API/cluster/provision" \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "job_id": 1,
+    "hosts": ["1.2.3.4","5.6.7.8"],
+    "username": "ubuntu",
+    "key_path": "/home/me/.ssh/id_rsa",
+    "image": "quackmesh-client:latest",
+    "worker_port": 9000,
+    "env": {"ORCHESTRATOR_API": "http://server:8000/api", "API_KEY": "'"$API_KEY"'"}
+  }'
+```
+
+## Notes
+- Provider endpoints must be reachable by the server container. On macOS, you can use `host.docker.internal:9001` when registering providers if workers run on the host.
+- POST endpoints require auth. Use `X-API-Key: $API_KEY` or configure JWT.
+- If rate-limited, adjust `RATE_LIMIT_PER_MINUTE` and `SENSITIVE_GETS_PER_MINUTE`.
+- Event listener polls periodically; create on-chain jobs after the server is up.
+- Flower server port `8089` is exposed in Docker Compose and the server Dockerfile. Ensure workers can reach `http://<server-host>:8089`.
+
+## Flower federated training (local smoke test)
+The Flower integration runs a Flower server inside the orchestrator container and starts Flower clients on workers.
+
+1) Ensure the server is running and port `8089` is reachable (Docker Compose maps `8089:8089`).
+2) Start at least one worker (see section 3.1).
+3) Run the Flower smoke test:
+```bash
+export API_KEY=admin-test-abc123
+export ORCHESTRATOR_API=http://localhost:8000/api
+export WORKER_ENDPOINT=127.0.0.1:9001
+# Optional: ROUNDS=1 STEPS=10
+bash scripts/smoke_flower_flow.sh
+```
+This will:
+- Create a non-HF job (MNIST/fake path)
+- Register and assign the worker
+- Start the Flower server and instruct the worker to start a Flower client
+- Fetch aggregated model weights
+
+## 6) Hugging Face training (PoC)
+This demonstrates creating an HF-backed job where workers decrypt a token, fine-tune locally (optionally using a dataset from HF), submit weights for FedAvg, and then push the aggregated model to the HF Hub.
+
+### 6.1 Set up encryption key and env
+```bash
+# Generate a Fernet key (once)
+python3 - <<'PY'
+from cryptography.fernet import Fernet
+print(Fernet.generate_key().decode())
+PY
+
+# Server: expose HF_TOKEN_ENC_KEY (compose supports it)
+export HF_TOKEN_ENC_KEY='<paste_fernet_key>'
+docker compose up -d server
+
+# Worker: same key for decryption
+export HF_TOKEN_DEC_KEY="$HF_TOKEN_ENC_KEY"
+```
+
+### 6.2 Start a worker (host example)
+```bash
+pip install -r client/requirements.txt
+export ORCHESTRATOR_API=http://localhost:8000/api
+python -m quackmesh_client worker --host 127.0.0.1 --port 9001
+```
+
+### 6.3 Create an HF job
+Use a repo you own or have write access to (e.g., `<your-username>/distilbert-base-uncased-quackmesh-demo`).
+```bash
+export API_KEY=admin-test-abc123
+export ORCHESTRATOR_API=http://localhost:8000/api
+
+JOB_ID=$(curl -s -X POST "$ORCHESTRATOR_API/job/" \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "model_arch":"hf_text_classification",
+    "reward_pool_duck": 0,
+    "huggingface_model_id":"<your-username>/distilbert-base-uncased-quackmesh-demo",
+    "huggingface_dataset_id":"imdb",
+    "huggingface_token":"<hf_user_token>",
+    "hf_private": true
+  }' | jq -r .job_id)
+echo "JOB_ID=$JOB_ID"
+```
+
+### 6.4 Trigger training (tiny local fine-tune)
+```bash
+curl -s -X POST http://127.0.0.1:9001/task/train \
+  -H 'Content-Type: application/json' \
+  -d "{\"job_id\": $JOB_ID, \"steps\": 1}"
+```
+
+Workers now upload model weights to the orchestrator for aggregation.
+
+### 6.5 Push aggregated model to Hugging Face
+After at least one training round and aggregation, instruct a worker to push the global model to the HF Hub via the orchestrator endpoint:
+```bash
+curl -s -X POST "$ORCHESTRATOR_API/round/$JOB_ID/push_hf" \
+  -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
+  -d '{"timeout_s": 120}' | jq .
+```
+
+### 6.6 Troubleshooting
+- Ensure server and worker share the same Fernet key.
+- Use your own HF repo; pushing to base models without write access will fail.
+- Check worker logs for HF download/push; verify `GET /api/job/$JOB_ID/hf_meta` responds.
+- If pushing hangs, confirm network egress and that the token scope includes write permissions.
