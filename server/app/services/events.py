@@ -107,6 +107,14 @@ class EventListener:
                                 # Optionally kick off a training round directly to providers
                                 if settings.auto_start_round_on_event and endpoints_assigned:
                                     steps = max(1, int(settings.auto_round_steps))
+                                    # Mark job as running
+                                    try:
+                                        with get_session() as session:
+                                            job = session.get(Job, chain_job_id)
+                                            if job:
+                                                job.status = "running"
+                                    except Exception:
+                                        pass
                                     for ep in endpoints_assigned:
                                         url = f"http://{ep}/task/train"
                                         try:

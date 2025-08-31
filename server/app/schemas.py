@@ -19,6 +19,12 @@ class ModelResponse(BaseModel):
     job_id: int
     weights: List[List[float]]
 
+class JobStatusResponse(BaseModel):
+    job_id: int
+    status: str
+    flower_running: bool
+    has_model: bool
+
 class HfMetaResponse(BaseModel):
     job_id: int
     huggingface_model_id: Optional[str] = None

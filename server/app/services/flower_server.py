@@ -8,7 +8,7 @@ import numpy as np
 import flwr as fl
 
 from ..db import get_session
-from ..models import ModelArtifact
+from ..models import ModelArtifact, Job
 
 logger = logging.getLogger("quackmesh.flower")
 
@@ -87,6 +87,14 @@ def start_flower_server(job_id: int, host: str = "0.0.0.0", port: int = 8089, ro
         logger.info("flower.server.start", extra={"job_id": job_id, "address": address, "rounds": rounds})
         fl.server.start_server(server_address=address, config=fl.server.ServerConfig(num_rounds=rounds), strategy=strategy)
         logger.info("flower.server.stop", extra={"job_id": job_id})
+        # Mark job as completed when Flower server stops
+        try:
+            with get_session() as session:
+                job = session.get(Job, job_id)
+                if job:
+                    job.status = "completed"
+        except Exception as e:
+            logger.warning("flower.server.mark_complete.fail", extra={"job_id": job_id, "error": str(e)})
 
     proc = mp.Process(target=_run, daemon=True, name=f"flower-server-{job_id}")
     _running_servers[job_id] = proc

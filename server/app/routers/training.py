@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 import requests
 from ..db import get_session
-from ..models import ClusterNode
+from ..models import ClusterNode, Job
 from ..security import require_auth
 from ..services.flower_server import start_flower_server, is_flower_running
 
@@ -22,6 +22,15 @@ def start_round(job_id: int, payload: RoundStartRequest, _auth: dict = Depends(r
         nodes = [n.endpoint for n in session.execute(select(ClusterNode).where(ClusterNode.job_id == job_id)).scalars().all()]
     if not nodes:
         raise HTTPException(status_code=400, detail="No cluster nodes assigned for this job")
+
+    # Mark job as running
+    try:
+        with get_session() as session:
+            job = session.get(Job, job_id)
+            if job:
+                job.status = "running"
+    except Exception:
+        pass
 
     results: list[dict] = []
     for ep in nodes:
@@ -96,11 +105,25 @@ def start_flower(job_id: int, payload: FlowerStartRequest, _auth: dict = Depends
         raise HTTPException(status_code=400, detail="No cluster nodes assigned for this job")
 
     # Start Flower server in background
-    srv = start_flower_server(job_id=job_id, host=payload.server_host, port=payload.server_port, rounds=payload.rounds)
+    # Bind host (inside container) vs client connect host (network reachable by workers)
+    bind_host = payload.server_host
+    client_host = (
+        "server" if payload.server_host in ("0.0.0.0", "127.0.0.1", "localhost") else payload.server_host
+    )
+    srv = start_flower_server(job_id=job_id, host=bind_host, port=payload.server_port, rounds=payload.rounds)
+
+    # Mark job as running
+    try:
+        with get_session() as session:
+            job = session.get(Job, job_id)
+            if job:
+                job.status = "running"
+    except Exception:
+        pass
 
     # Instruct each node to start Flower client
     results: list[dict] = []
-    address = f"{payload.server_host}:{payload.server_port}"
+    address = f"{client_host}:{payload.server_port}"
     for ep in nodes:
         url = f"http://{ep}/task/flower/start"
         try:

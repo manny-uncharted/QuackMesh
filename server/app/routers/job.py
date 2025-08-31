@@ -3,12 +3,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..db import get_session, Base, engine
 from ..models import Job, ModelArtifact, Update
-from ..schemas import CreateJobRequest, CreateJobResponse, ModelResponse, UpdateRequest, HfMetaResponse
+from ..schemas import CreateJobRequest, CreateJobResponse, ModelResponse, UpdateRequest, HfMetaResponse, JobStatusResponse
 from ..services.fedavg import fedavg
 from ..security import require_auth
 from ..config import settings
 from ..services.crypto import encrypt_token
 import base64
+from ..services.flower_server import is_flower_running
 
 # Create tables if not exist
 if settings.enable_create_all:
@@ -48,6 +49,17 @@ def get_model(job_id: int):
         if artifact is None:
             raise HTTPException(status_code=404, detail="Model not found")
         return ModelResponse(job_id=job_id, weights=artifact.weights or [])
+
+@router.get("/{job_id}/status", response_model=JobStatusResponse)
+def get_job_status(job_id: int):
+    with get_session() as session:
+        job = session.get(Job, job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        stmt = select(ModelArtifact).where(ModelArtifact.job_id == job_id)
+        artifact = session.execute(stmt).scalar_one_or_none()
+        has_model = bool(artifact and artifact.weights and len(artifact.weights) > 0)
+    return JobStatusResponse(job_id=job_id, status=job.status or "created", flower_running=is_flower_running(job_id), has_model=has_model)
 
 @router.get("/{job_id}/hf_meta", response_model=HfMetaResponse)
 def get_hf_meta(job_id: int, _auth: dict = Depends(require_auth(["job:read"]))):
