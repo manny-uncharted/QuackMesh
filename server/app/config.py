@@ -35,6 +35,9 @@ class Settings(BaseModel):
     # Hugging Face credential encryption
     hf_token_enc_key: str | None = os.getenv("HF_TOKEN_ENC_KEY")
 
+    # Worker control key for forwarding control commands
+    worker_control_key: str | None = os.getenv("WORKER_CONTROL_KEY")
+
 settings = Settings()
 
 

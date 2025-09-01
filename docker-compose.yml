@@ -47,6 +47,8 @@ services:
       AUTO_ROUND_STEPS: ${AUTO_ROUND_STEPS:-1}
       # HF credential encryption key (Fernet). For demo use a static value; in prod use Secrets Manager.
       HF_TOKEN_ENC_KEY: ${HF_TOKEN_ENC_KEY:-}
+      # Worker control key used to authenticate control forwarding to workers
+      WORKER_CONTROL_KEY: ${WORKER_CONTROL_KEY:-}
     volumes:
       - ./contracts/abi:/app/contracts_abi:ro
       - ./server/app:/app/app
@@ -75,6 +77,7 @@ services:
       WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
       DATASET: ${DATASET:-FAKE}
       API_KEY: ${API_KEY:-}
+      WORKER_CONTROL_KEY: ${WORKER_CONTROL_KEY:-}
       MACHINE_ID: 1
       PROVIDER_ADDRESS: ${PROVIDER_ADDRESS:-0x0000000000000000000000000000000000000001}
       PROVIDER_ENDPOINT: worker1:9001
@@ -95,6 +98,7 @@ services:
       WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
       DATASET: ${DATASET:-FAKE}
       API_KEY: ${API_KEY:-}
+      WORKER_CONTROL_KEY: ${WORKER_CONTROL_KEY:-}
       MACHINE_ID: 2
       PROVIDER_ADDRESS: ${PROVIDER_ADDRESS:-0x0000000000000000000000000000000000000002}
       PROVIDER_ENDPOINT: worker2:9002

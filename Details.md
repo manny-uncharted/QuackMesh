@@ -10,6 +10,27 @@
 
 ---
 
+## ⚡ Executive summary
+
+- Decentralized compute marketplace + federated learning. Privacy by design; data stays local.  
+- Providers auto-register via authenticated heartbeats; dashboard shows live Online status.  
+- Developers rent compute, launch jobs, and pay with $DUCK; providers earn $DUCK for compute/data.  
+- Shipped as a complete product: DuckChain contracts, FastAPI orchestrator, Python workers, Next.js app, Docker + CI/CD.
+
+## 🏆 Why this wins (cheat sheet)
+- **Privacy-first AI**: Federated learning with secure aggregation and fault tolerance.
+- **End-to-end polish**: Real training, marketplace, wallet UX, error handling, and logs.
+- **Token utility**: Clear $DUCK flows for renting, rewarding, staking/prioritization.
+- **Web2-friendly**: One-click node setup, API keys, and familiar cloud-like dashboard.
+- **Production readiness**: AWS infra, Docker Compose, GitHub Actions, metrics.
+
+## ⏱ 60-second demo path
+1) Connect wallet in dashboard.  
+2) Register node (one-click script).  
+3) Heartbeats appear → node turns Online.  
+4) Open Marketplace → filter and rent a node.  
+5) Watch job start and rewards accrue in real time.
+
 ## 🎯 **Project Overview**
 
 QuackMesh is a **decentralized federated learning platform** that revolutionizes AI training by combining privacy-preserving machine learning with blockchain incentives. Contributors earn $DUCK tokens by providing compute power and datasets, while developers can rent distributed clusters for scalable AI workloads.

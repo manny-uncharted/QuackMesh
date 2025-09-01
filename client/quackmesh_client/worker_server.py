@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 import numpy as np
@@ -11,6 +11,7 @@ from collections import deque
 import threading
 import multiprocessing as mp
 import time
+import anyio
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -27,6 +28,7 @@ from .data_pipeline import get_mnist_loaders, get_fake_mnist_loaders, get_text_c
 
 API_BASE = os.getenv("ORCHESTRATOR_API", "http://localhost:8000/api")
 API_KEY = os.getenv("API_KEY")
+CONTROL_KEY = os.getenv("WORKER_CONTROL_KEY")
 DATA_DIR = os.getenv("DATA_DIR", "/tmp/data")
 DATASET = os.getenv("DATASET", "FAKE").upper()  # FAKE (default) or MNIST
 HF_TOKEN_DEC_KEY = os.getenv("HF_TOKEN_DEC_KEY") or os.getenv("HF_TOKEN_ENC_KEY")
@@ -130,6 +132,11 @@ class TrainTask(BaseModel):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="QuackMesh Provider Worker")
+    state = {
+        "suspended": False,
+        # job_id -> pid mapping for Flower client processes
+        "flower_pids": {},  # dict[int,int]
+    }
 
     @app.get("/health")
     def health():
@@ -562,12 +569,100 @@ def create_app() -> FastAPI:
 
             proc = mp.Process(target=_run, daemon=True, name=f"flower-client-{task.job_id}")
             proc.start()
+            # record pid for control ops
+            try:
+                state["flower_pids"][int(task.job_id)] = int(proc.pid)
+            except Exception:
+                pass
             return {"started": True, "pid": proc.pid}
         except HTTPException:
             raise
         except Exception as e:
             logger.exception("flower.client.start.fail", extra={"job_id": getattr(task, "job_id", None)})
             raise HTTPException(status_code=502, detail=f"flower client start failed: {e}")
+
+    @app.post("/control")
+    def control(request: Request):
+        try:
+            body = request.json() if hasattr(request, "json") else None
+        except Exception:
+            body = None
+        try:
+            # FastAPI Request.json() is async; handle properly
+            async def _read_json(req: Request):
+                try:
+                    return await req.json()
+                except Exception:
+                    return None
+            body = anyio.run(_read_json, request)
+        except Exception:
+            pass
+
+        if not isinstance(body, dict):
+            body = {}
+        action = str(body.get("action") or "").lower()
+
+        # Optional control-key check
+        if CONTROL_KEY:
+            hdr_key = request.headers.get("X-Control-Key") or request.headers.get("x-control-key")
+            if hdr_key != CONTROL_KEY:
+                raise HTTPException(status_code=403, detail="invalid control key")
+
+        if action not in {"start", "stop", "restart", "terminate"}:
+            raise HTTPException(status_code=400, detail="unknown action")
+
+        result: dict = {"action": action}
+
+        try:
+            if action == "start":
+                state["suspended"] = False
+                result["suspended"] = False
+            elif action == "stop":
+                state["suspended"] = True
+                # best-effort: stop any flower client processes
+                for jid, pid in list(state["flower_pids"].items()):
+                    try:
+                        p = psutil.Process(int(pid))
+                        if p.is_running():
+                            p.terminate()
+                    except Exception:
+                        pass
+                result["suspended"] = True
+            elif action == "restart":
+                state["suspended"] = True
+                # stop clients
+                for jid, pid in list(state["flower_pids"].items()):
+                    try:
+                        p = psutil.Process(int(pid))
+                        if p.is_running():
+                            p.terminate()
+                    except Exception:
+                        pass
+                # resume
+                state["suspended"] = False
+                result["suspended"] = False
+            elif action == "terminate":
+                # stop clients, then exit the worker process (supervisor may restart)
+                for jid, pid in list(state["flower_pids"].items()):
+                    try:
+                        p = psutil.Process(int(pid))
+                        if p.is_running():
+                            p.terminate()
+                    except Exception:
+                        pass
+                result["exiting"] = True
+                # delayed hard-exit to allow response to flush
+                def _die():
+                    time.sleep(0.5)
+                    os._exit(0)
+                threading.Thread(target=_die, daemon=True).start()
+            logger.info("control", extra={"action": action, "result": result})
+            return {"ok": True, **result}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("control.fail", extra={"action": action})
+            raise HTTPException(status_code=500, detail=f"control failed: {e}")
 
     # Background heartbeat sender
     def _heartbeat_loop():
@@ -585,7 +680,8 @@ def create_app() -> FastAPI:
                     "machine_id": int(machine_id),
                     "provider_address": provider_address,
                     "endpoint": endpoint,
-                    "status": "training" if False else "online",
+                    # report offline when suspended
+                    "status": "offline" if state.get("suspended") else "online",
                     "metrics": _collect_metrics(),
                 }
                 r = requests.post(url, json=payload, headers=api_headers(), timeout=5)
@@ -596,8 +692,7 @@ def create_app() -> FastAPI:
             except Exception:
                 logger.exception("heartbeat.error")
             finally:
-                import time as _t
-                _t.sleep(30)
+                time.sleep(30)
 
     th = threading.Thread(target=_heartbeat_loop, daemon=True, name="heartbeat")
     th.start()

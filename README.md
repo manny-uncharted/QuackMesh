@@ -3,6 +3,35 @@
 > **Winner Project for DuckChain x AWS Hack: AI Unchained** 🏆  
 > *Train AI. Protect Privacy. Earn $DUCK.*
 
+## TL;DR
+
+- Decentralized compute marketplace + federated learning.  
+  Providers auto-register via authenticated heartbeats and earn $DUCK. Developers rent nodes for training/inference.
+- Privacy-by-design: data never leaves the device; only model updates/metrics are shared.
+- Works today: Next.js + FastAPI + Solidity on DuckChain, shipped with Docker Compose and CI/CD.
+- Smooth Web2→Web3 onboarding: one-click node setup, API key auth, and wallet-gated views.
+
+## Why this wins (at a glance)
+- **Privacy-first training** with federated learning and secure aggregation.
+- **End-to-end product**: smart contracts, orchestrator, workers, and polished UI.
+- **Great UX**: familiar cloud feel; one-click node registration; instant feedback.
+- **Real token utility**: pay to rent compute, earn by providing compute/data with $DUCK.
+- **Production-ready** infra with AWS, Docker, and GitHub Actions.
+
+## 60-second demo path
+1. Connect wallet in the dashboard.  
+2. Register your node (one-click script).  
+3. Node heartbeats -> status turns Online.  
+4. Go to Marketplace, filter, and rent a node.  
+5. Watch job progress and rewards accrue.
+
+## Quick links
+- Live demo: https://quackmesh.demo  
+- Deep dive: `Details.md`  
+- Local dev: `docs/LOCAL_TESTING.md` and `docker-compose.yml`  
+- API/Frontend envs: `frontend/.env.example` (set `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_API_KEY`)  
+- Smart contracts: `contracts/contracts/`
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DuckChain](https://img.shields.io/badge/Built%20on-DuckChain-orange)](https://duckchain.io)
 [![AWS](https://img.shields.io/badge/Powered%20by-AWS-orange)](https://aws.amazon.com)

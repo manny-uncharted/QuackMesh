@@ -228,10 +228,31 @@ def control_node(machine_id: int, control: NodeControlRequest, _auth: dict = Dep
         action_result: Dict | None = None
         if control.action == "start" and node.endpoint:
             try:
-                r = requests.get(f"http://{node.endpoint}/health", timeout=5)
+                r = requests.get(f"https://{node.endpoint}/health", timeout=5)
                 action_result = {"reachable": bool(r.ok), "status": r.status_code}
             except Exception as e:
                 action_result = {"reachable": False, "error": str(e)}
+
+        # Forward control command to worker if endpoint available
+        forward_result: Dict | None = None
+        if node.endpoint and control.action in {"start", "stop", "restart", "terminate"}:
+            headers = {}
+            if settings.worker_control_key:
+                headers["X-Control-Key"] = settings.worker_control_key
+            try:
+                resp = requests.post(
+                    f"https://{node.endpoint}/control",
+                    json={"action": control.action, "params": control.params or {}},
+                    headers=headers or None,
+                    timeout=7,
+                )
+                # best-effort parse
+                try:
+                    forward_result = resp.json()
+                except Exception:
+                    forward_result = {"ok": resp.ok, "status": resp.status_code, "text": resp.text[:200] if resp.text else None}
+            except Exception as e:
+                forward_result = {"ok": False, "error": str(e)}
         
         # Log the command
         log_entry = NodeLog(
@@ -239,11 +260,11 @@ def control_node(machine_id: int, control: NodeControlRequest, _auth: dict = Dep
             timestamp=datetime.utcnow(),
             level="INFO",
             message=f"Control command received: {control.action}",
-            metadata_={"command": control.action, "params": control.params, "result": action_result}
+            metadata_={"command": control.action, "params": control.params, "result": action_result, "forward": forward_result}
         )
         session.add(log_entry)
         
-        return {"status": "command_sent", "action": control.action, "result": action_result}
+        return {"status": "command_sent", "action": control.action, "result": action_result, "forward": forward_result}
 
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
