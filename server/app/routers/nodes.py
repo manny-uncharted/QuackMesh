@@ -3,7 +3,7 @@ from sqlalchemy import select, delete, update
 from sqlalchemy.orm import Session
 from ..db import get_session, Base, engine
 from ..models import ProviderMachine, NodeHeartbeat, NodeLog
-from ..schemas import NodeStatusResponse, NodeHeartbeatRequest, NodeControlRequest
+from ..schemas import NodeStatusResponse, NodeHeartbeatRequest, NodeControlRequest, NodePingRequest
 from ..security import require_auth
 from ..config import settings
 from typing import List, Dict
@@ -11,6 +11,7 @@ import json
 import asyncio
 from datetime import datetime, timedelta
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,29 @@ def get_user_nodes(user_address: str = None, _auth: dict = Depends(require_auth(
                 if time_diff < timedelta(minutes=5):
                     status = latest_heartbeat.status or "online"
                     usage = latest_heartbeat.usage or {}
+
+            # Normalize usage keys for frontend expectations
+            # frontend expects: cpu_percent, memory_percent, gpu_percent
+            normalized_usage = {}
+            try:
+                if isinstance(usage, dict):
+                    cpu_percent = usage.get("cpu_percent")
+                    if cpu_percent is None:
+                        cpu_percent = usage.get("cpu")  # worker metric name
+                    normalized_usage["cpu_percent"] = cpu_percent or 0
+
+                    mem_percent = usage.get("memory_percent")
+                    if mem_percent is None:
+                        mem_percent = usage.get("ram_pct")  # worker metric name
+                    normalized_usage["memory_percent"] = mem_percent or 0
+
+                    gpu_percent = usage.get("gpu_percent")
+                    if gpu_percent is None:
+                        # Some workers may report gpu as utilization percent; default 0
+                        gpu_percent = usage.get("gpu")
+                    normalized_usage["gpu_percent"] = gpu_percent or 0
+            except Exception:
+                normalized_usage = {}
             
             result.append(NodeStatusResponse(
                 machine_id=node.machine_id,
@@ -93,14 +117,14 @@ def get_user_nodes(user_address: str = None, _auth: dict = Depends(require_auth(
                 specs=json.loads(node.specs) if node.specs else {},
                 status=status,
                 last_seen=last_seen,
-                usage=usage
+                usage=normalized_usage
             ))
         
         return result
 
 @router.post("/ping")
-def node_heartbeat(heartbeat: NodeHeartbeatRequest, _auth: dict = Depends(require_auth())):
-    """Receive heartbeat from a node"""
+def node_heartbeat(heartbeat: NodePingRequest, _auth: dict = Depends(require_auth())):
+    """Receive heartbeat from a node (worker NodePingRequest)."""
     with get_session() as session:
         # Verify node exists
         node = session.execute(
@@ -111,22 +135,37 @@ def node_heartbeat(heartbeat: NodeHeartbeatRequest, _auth: dict = Depends(requir
             raise HTTPException(status_code=404, detail="Node not found")
         
         # Create or update heartbeat record
+        now = datetime.utcnow()
         new_heartbeat = NodeHeartbeat(
             machine_id=heartbeat.machine_id,
-            timestamp=datetime.utcnow(),
-            status=heartbeat.status,
-            usage=heartbeat.usage,
-            metadata_=heartbeat.metadata_
+            timestamp=now,
+            status=heartbeat.status or "online",
+            usage=heartbeat.metrics,
+            metadata_={
+                "endpoint": heartbeat.endpoint,
+                "provider_address": heartbeat.provider_address,
+            },
         )
         session.add(new_heartbeat)
+        # Update ProviderMachine cached fields
+        try:
+            node.last_seen = now
+            if heartbeat.status:
+                node.status = heartbeat.status
+            if heartbeat.endpoint:
+                node.endpoint = heartbeat.endpoint
+            if heartbeat.metrics is not None:
+                node.metrics = heartbeat.metrics
+        except Exception:
+            pass
         
         # Broadcast status update to connected clients
         asyncio.create_task(manager.broadcast(json.dumps({
             "type": "node_status_update",
             "machine_id": heartbeat.machine_id,
-            "status": heartbeat.status,
-            "usage": heartbeat.usage,
-            "timestamp": datetime.utcnow().isoformat()
+            "status": heartbeat.status or "online",
+            "usage": heartbeat.metrics,
+            "timestamp": now.isoformat()
         })))
         
         return {"status": "ok", "timestamp": datetime.utcnow()}
@@ -174,18 +213,26 @@ def control_node(machine_id: int, control: NodeControlRequest, _auth: dict = Dep
         if not node:
             raise HTTPException(status_code=404, detail="Node not found")
         
-        # TODO: Implement actual node control via API call to node endpoint
-        # For now, just log the command
+        # Basic health check for 'start' to verify worker is reachable.
+        action_result: Dict | None = None
+        if control.action == "start" and node.endpoint:
+            try:
+                r = requests.get(f"http://{node.endpoint}/health", timeout=5)
+                action_result = {"reachable": bool(r.ok), "status": r.status_code}
+            except Exception as e:
+                action_result = {"reachable": False, "error": str(e)}
+        
+        # Log the command
         log_entry = NodeLog(
             machine_id=machine_id,
             timestamp=datetime.utcnow(),
             level="INFO",
             message=f"Control command received: {control.action}",
-            metadata_={"command": control.action, "params": control.params}
+            metadata_={"command": control.action, "params": control.params, "result": action_result}
         )
         session.add(log_entry)
         
-        return {"status": "command_sent", "action": control.action}
+        return {"status": "command_sent", "action": control.action, "result": action_result}
 
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):

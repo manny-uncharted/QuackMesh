@@ -26,9 +26,19 @@ export const config = createConfig({
   connectors: [
     injected(),
     metaMask(),
-    ...(process.env.NEXT_PUBLIC_WC_PROJECT_ID ? [walletConnect({ 
-      projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID 
-    })] : []),
+    // Only enable WalletConnect when a valid project ID is supplied.
+    // This avoids remote 403s like "projectId=demo" and duplicate core inits.
+    ...(
+      process.env.NEXT_PUBLIC_WC_PROJECT_ID &&
+      process.env.NEXT_PUBLIC_WC_PROJECT_ID !== 'your_walletconnect_project_id' &&
+      process.env.NEXT_PUBLIC_WC_PROJECT_ID.toLowerCase() !== 'demo'
+        ? [
+            walletConnect({
+              projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID,
+            }),
+          ]
+        : []
+    ),
   ],
   transports: {
     [duckChainTestnet.id]: http(),

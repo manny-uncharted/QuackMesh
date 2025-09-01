@@ -59,7 +59,9 @@ def get_job_status(job_id: int):
         stmt = select(ModelArtifact).where(ModelArtifact.job_id == job_id)
         artifact = session.execute(stmt).scalar_one_or_none()
         has_model = bool(artifact and artifact.weights and len(artifact.weights) > 0)
-    return JobStatusResponse(job_id=job_id, status=job.status or "created", flower_running=is_flower_running(job_id), has_model=has_model)
+        # Capture status before the session is closed to avoid DetachedInstanceError
+        status_str = job.status or "created"
+    return JobStatusResponse(job_id=job_id, status=status_str, flower_running=is_flower_running(job_id), has_model=has_model)
 
 @router.get("/{job_id}/hf_meta", response_model=HfMetaResponse)
 def get_hf_meta(job_id: int, _auth: dict = Depends(require_auth(["job:read"]))):

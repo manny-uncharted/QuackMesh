@@ -6,6 +6,8 @@ import { motion } from "framer-motion"
 import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWriteContract } from "wagmi"
 import { ComputeMarketplaceABI } from "@/lib/abi/ComputeMarketplace"
 import { decodeEventLog, type Hex } from "viem"
+import { useConnection } from "@/lib/connection"
+import { createMockJob } from "@/lib/mockServices"
 
 export type RentMode = "train" | "compute"
 
@@ -34,6 +36,7 @@ export function RentModal({ open, onClose, node, defaultMode = "train" }: RentMo
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
+  const { mode: globalMode, isBlockchainAlive, isHuggingFaceReachable } = useConnection()
 
   const [mode, setMode] = useState<RentMode>(defaultMode)
   const [hours, setHours] = useState<string>("1")
@@ -93,6 +96,12 @@ export function RentModal({ open, onClose, node, defaultMode = "train" }: RentMo
   }, [receipt, publicClient])
 
   const validateHf = async () => {
+    // In demo mode or if HF is unreachable, bypass validation and optimistically accept
+    if (globalMode === 'demo' || !isHuggingFaceReachable) {
+      setModelOk(!!modelId)
+      setDatasetOk(true)
+      return
+    }
     setChecking(true)
     const [mOk, dOk] = await Promise.all([
       hfExists("models", modelId),
@@ -109,6 +118,18 @@ export function RentModal({ open, onClose, node, defaultMode = "train" }: RentMo
     if (!node || !isConnected) return
     setError(null)
     try {
+      // Demo mode or chain unavailable: simulate rent + job and navigate
+      if (globalMode === 'demo' || !isBlockchainAlive) {
+        if (mode === 'train') {
+          if (modelId) {
+            await validateHf()
+          }
+        }
+        const jobId = createMockJob(node.machine_id, mode)
+        window.location.href = `/dashboard/jobs/${jobId}`
+        return
+      }
+
       const addressStr = process.env.NEXT_PUBLIC_COMPUTE_MARKETPLACE_ADDRESS
       if (!addressStr) throw new Error("Marketplace address not configured")
       const machineId = BigInt(node.machine_id)

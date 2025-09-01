@@ -32,6 +32,7 @@ services:
       INFERENCE_POOL_ADDRESS: ${INFERENCE_POOL_ADDRESS:-0x0000000000000000000000000000000000000000}
       CONTRACTS_ABI_DIR: /app/contracts_abi
       API_KEY: ${API_KEY:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
       SENSITIVE_GETS_PER_MINUTE: ${SENSITIVE_GETS_PER_MINUTE:-30}
       JWT_SECRET: ${JWT_SECRET:-}
@@ -73,6 +74,10 @@ services:
       ORCHESTRATOR_API: http://server:8000/api
       WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
       DATASET: ${DATASET:-FAKE}
+      API_KEY: ${API_KEY:-}
+      MACHINE_ID: 1
+      PROVIDER_ADDRESS: ${PROVIDER_ADDRESS:-0x0000000000000000000000000000000000000001}
+      PROVIDER_ENDPOINT: worker1:9001
     command: ["worker", "--host", "0.0.0.0", "--port", "9001"]
     depends_on:
       - server
@@ -89,6 +94,10 @@ services:
       ORCHESTRATOR_API: http://server:8000/api
       WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
       DATASET: ${DATASET:-FAKE}
+      API_KEY: ${API_KEY:-}
+      MACHINE_ID: 2
+      PROVIDER_ADDRESS: ${PROVIDER_ADDRESS:-0x0000000000000000000000000000000000000002}
+      PROVIDER_ENDPOINT: worker2:9002
     command: ["worker", "--host", "0.0.0.0", "--port", "9002"]
     depends_on:
       - server

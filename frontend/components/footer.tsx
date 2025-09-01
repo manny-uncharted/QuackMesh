@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { Github, Twitter, MessageSquare, Mail } from 'lucide-react'
+import { useConnection } from '@/lib/connection'
 
 export function Footer() {
   const currentYear = new Date().getFullYear()
+  const { mode } = useConnection()
 
   return (
     <footer className="bg-primary-900 text-white">
@@ -78,8 +80,12 @@ export function Footer() {
 
         {/* Bottom Bar */}
         <div className="border-t border-gray-700 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-gray-300 text-sm">
-            © {currentYear} QuackMesh. All rights reserved.
+          <p className="text-gray-300 text-sm flex items-center gap-3">
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-white/5">
+              <span className={`inline-block w-2 h-2 rounded-full ${mode === 'live' ? 'bg-green-400' : 'bg-orange-400'}`}></span>
+              <span className="uppercase tracking-wide">{mode === 'live' ? 'Live' : 'Demo'}</span>
+            </span>
+            <span> {currentYear} QuackMesh. All rights reserved.</span>
           </p>
           <div className="flex gap-6 mt-4 md:mt-0">
             <Link href="/privacy" className="text-gray-300 hover:text-white text-sm transition-colors">

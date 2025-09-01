@@ -19,6 +19,9 @@ import {
   Wifi
 } from 'lucide-react'
 import { RentModal, type RentMode } from '@/components/marketplace/rent-modal'
+import { useConnection } from '@/lib/connection'
+import { apiBase, authHeaders } from '@/lib/api'
+import { fetchMockMarketplaceNodes } from '@/lib/mockServices'
 
 interface MarketplaceNode {
   machine_id: number
@@ -44,6 +47,7 @@ export default function MarketplacePage() {
   const { isConnected } = useAccount()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { isBackendAlive } = useConnection()
   const [nodes, setNodes] = useState<MarketplaceNode[]>([])
   const [filteredNodes, setFilteredNodes] = useState<MarketplaceNode[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,70 +69,59 @@ export default function MarketplacePage() {
       return
     }
 
-    // Mock marketplace data
-    const mockNodes: MarketplaceNode[] = [
-      {
-        machine_id: 101,
-        provider_address: '0x1234...5678',
-        name: 'High-Performance GPU Rig',
-        location: 'San Francisco, CA',
-        specs: { cpu: 16, gpu: 2, ram_gb: 64, storage_gb: 1000 },
-        price_per_hour: 25.5,
-        availability: 'available',
-        rating: 4.9,
-        total_jobs: 156,
-        uptime: 99.2,
-        last_active: '2 minutes ago',
-        features: ['NVIDIA RTX 4090', 'High-speed SSD', 'Dedicated bandwidth']
-      },
-      {
-        machine_id: 102,
-        provider_address: '0x2345...6789',
-        name: 'Enterprise Server',
-        location: 'New York, NY',
-        specs: { cpu: 32, gpu: 0, ram_gb: 128, storage_gb: 2000 },
-        price_per_hour: 18.0,
-        availability: 'available',
-        rating: 4.7,
-        total_jobs: 89,
-        uptime: 98.8,
-        last_active: '5 minutes ago',
-        features: ['Intel Xeon', 'ECC Memory', '24/7 monitoring']
-      },
-      {
-        machine_id: 103,
-        provider_address: '0x3456...7890',
-        name: 'Budget Training Node',
-        location: 'Austin, TX',
-        specs: { cpu: 8, gpu: 1, ram_gb: 32, storage_gb: 500 },
-        price_per_hour: 12.0,
-        availability: 'available',
-        rating: 4.5,
-        total_jobs: 234,
-        uptime: 97.5,
-        last_active: '1 minute ago',
-        features: ['GTX 1080 Ti', 'Cost-effective', 'Reliable']
-      },
-      {
-        machine_id: 104,
-        provider_address: '0x4567...8901',
-        name: 'AI Workstation Pro',
-        location: 'Seattle, WA',
-        specs: { cpu: 24, gpu: 4, ram_gb: 96, storage_gb: 1500 },
-        price_per_hour: 45.0,
-        availability: 'rented',
-        rating: 5.0,
-        total_jobs: 67,
-        uptime: 99.8,
-        last_active: '30 seconds ago',
-        features: ['4x RTX 4080', 'NVLink', 'Liquid cooling']
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        if (isBackendAlive) {
+          const r = await fetch(`${apiBase}/marketplace/search`, { headers: authHeaders() })
+          if (r.ok) {
+            const data = await r.json() as { machines: any[] }
+            const mapped: MarketplaceNode[] = (data.machines || []).map((m) => ({
+              machine_id: m.machine_id,
+              provider_address: m.provider_address,
+              name: `Machine #${m.machine_id}`,
+              location: 'Unknown',
+              specs: {
+                cpu: Number(m.specs?.cpu ?? 0),
+                gpu: Number(m.specs?.gpu ?? 0),
+                ram_gb: Number(m.specs?.ram_gb ?? 0),
+                storage_gb: Number(m.specs?.storage_gb ?? 0),
+              },
+              price_per_hour: Number(m.price_per_hour ?? 0),
+              availability: (m.availability ?? 'available') as any,
+              rating: 4.7,
+              total_jobs: 0,
+              uptime: 99.0,
+              last_active: 'just now',
+              features: [
+                (m.specs?.gpu ?? 0) > 0 ? 'GPU Available' : 'CPU Only',
+                'NVMe SSD',
+              ],
+            }))
+            if (!cancelled) {
+              setNodes(mapped)
+              setFilteredNodes(mapped.filter(n => n.availability === 'available'))
+            }
+          } else {
+            throw new Error('search failed')
+          }
+        } else {
+          throw new Error('backend down')
+        }
+      } catch {
+        const mock = await fetchMockMarketplaceNodes()
+        if (!cancelled) {
+          setNodes(mock)
+          setFilteredNodes(mock.filter(n => n.availability === 'available'))
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-    ]
-
-    setNodes(mockNodes)
-    setFilteredNodes(mockNodes.filter(n => n.availability === 'available'))
-    setLoading(false)
-  }, [isConnected, router])
+    }
+    load()
+    return () => { cancelled = true }
+  }, [isConnected, router, isBackendAlive])
 
   useEffect(() => {
     let filtered = nodes.filter(node => {

@@ -22,6 +22,7 @@ import {
   CheckCircle,
   TrendingUp
 } from 'lucide-react'
+import { apiBase, authHeaders } from '@/lib/api'
 
 interface NodeStatus {
   machine_id: number
@@ -55,6 +56,7 @@ export default function NodesPage() {
   const [selectedNode, setSelectedNode] = useState<number | null>(null)
   const [logs, setLogs] = useState<string[]>([])
   const [showLogs, setShowLogs] = useState(false)
+  const [control, setControl] = useState<Record<number, { pending: boolean; ok?: boolean; message?: string }>>({})
 
   useEffect(() => {
     if (!isConnected) {
@@ -62,45 +64,43 @@ export default function NodesPage() {
       return
     }
     
-    // Mock data - replace with real API calls
-    const mockNodes: NodeStatus[] = [
-      {
-        machine_id: 1,
-        name: 'Gaming Rig Pro',
-        provider_address: address || '',
-        endpoint: '192.168.1.100:9000',
-        specs: { cpu: 16, gpu: 1, ram_gb: 32 },
-        status: 'training',
-        last_seen: new Date(Date.now() - 30000).toISOString(),
-        usage: { cpu_percent: 75, memory_percent: 68, gpu_percent: 92 },
-        earnings: { hourly_rate: 15.5, total_earned: 1247.8, active_rental: true }
-      },
-      {
-        machine_id: 2,
-        name: 'Home Server',
-        provider_address: address || '',
-        endpoint: '192.168.1.101:9000',
-        specs: { cpu: 8, gpu: 0, ram_gb: 16 },
-        status: 'online',
-        last_seen: new Date(Date.now() - 60000).toISOString(),
-        usage: { cpu_percent: 25, memory_percent: 45 },
-        earnings: { hourly_rate: 8.2, total_earned: 456.3, active_rental: false }
-      },
-      {
-        machine_id: 3,
-        name: 'Cloud Instance',
-        provider_address: address || '',
-        endpoint: '34.123.45.67:9000',
-        specs: { cpu: 4, gpu: 0, ram_gb: 8 },
-        status: 'offline',
-        last_seen: new Date(Date.now() - 600000).toISOString(),
-        usage: { cpu_percent: 0, memory_percent: 0 },
-        earnings: { hourly_rate: 5.0, total_earned: 89.1, active_rental: false }
+    let cancelled = false
+    const load = async () => {
+      try {
+        const url = `${apiBase}/nodes${address ? `?user_address=${encodeURIComponent(address)}` : ''}`
+        const r = await fetch(url, { headers: authHeaders(), cache: 'no-store' })
+        if (!r.ok) throw new Error(`Failed to load nodes: ${r.status}`)
+        const data = await r.json()
+        const mapped: NodeStatus[] = (Array.isArray(data) ? data : []).map((n: any) => ({
+          machine_id: n.machine_id,
+          name: n.name || `Node-${n.machine_id}`,
+          provider_address: n.provider_address || '',
+          endpoint: n.endpoint || '',
+          specs: {
+            cpu: n.specs?.cpu ?? n.specs?.cpu_cores ?? 0,
+            gpu: n.specs?.gpu ?? n.specs?.gpu_count ?? 0,
+            ram_gb: n.specs?.ram_gb ?? (n.specs?.ram_bytes ? Math.round(n.specs.ram_bytes / (1024 ** 3)) : 0),
+          },
+          status: (['online', 'offline', 'training', 'error'].includes(n.status) ? n.status : 'offline') as any,
+          last_seen: n.last_seen || '',
+          usage: {
+            cpu_percent: n.usage?.cpu_percent ?? 0,
+            memory_percent: n.usage?.memory_percent ?? 0,
+            gpu_percent: n.usage?.gpu_percent ?? 0,
+          },
+          earnings: { hourly_rate: 0, total_earned: 0, active_rental: false },
+        }))
+        if (!cancelled) {
+          setNodes(mapped)
+          setLoading(false)
+        }
+      } catch (e) {
+        if (!cancelled) setLoading(false)
       }
-    ]
-    
-    setNodes(mockNodes)
-    setLoading(false)
+    }
+    load()
+    const id = setInterval(load, 5000)
+    return () => { cancelled = true; clearInterval(id) }
   }, [isConnected, address, router])
 
   const getStatusIcon = (status: string) => {
@@ -128,25 +128,65 @@ export default function NodesPage() {
     }
   }
 
-  const handleNodeAction = (nodeId: number, action: string) => {
-    console.log(`${action} node ${nodeId}`)
-    // TODO: Implement actual node control
+  const handleNodeAction = async (nodeId: number, action: string) => {
+    try {
+      setControl(prev => ({ ...prev, [nodeId]: { pending: true } }))
+      const body = { action: action === 'delete' ? 'terminate' : action }
+      const r = await fetch(`${apiBase}/nodes/${encodeURIComponent(nodeId)}/control`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+      })
+      const txt = await r.text()
+      let json: any = undefined
+      try { json = txt ? JSON.parse(txt) : undefined } catch {}
+      const reachable = json?.result?.reachable
+      const ok = r.ok && (reachable !== false)
+      // Optimistic status flip for start/stop
+      if (ok) {
+        setNodes(prev => prev.map(n => {
+          if (n.machine_id !== nodeId) return n
+          if (action === 'start' && reachable === true) return { ...n, status: 'online' }
+          if (action === 'stop') return { ...n, status: 'offline' }
+          return n
+        }))
+      }
+      setControl(prev => ({
+        ...prev,
+        [nodeId]: {
+          pending: false,
+          ok,
+          message: ok ? 'Command sent' : `Failed${json?.result?.error ? `: ${json.result.error}` : ''}`,
+        },
+      }))
+    } catch (e: any) {
+      setControl(prev => ({ ...prev, [nodeId]: { pending: false, ok: false, message: e?.message || 'Error' } }))
+    }
   }
 
-  const viewNodeLogs = (nodeId: number) => {
+  const viewNodeLogs = async (nodeId: number) => {
     setSelectedNode(nodeId)
     setShowLogs(true)
-    // Mock logs
-    setLogs([
-      '[2024-01-15 10:30:15] INFO: Node started successfully',
-      '[2024-01-15 10:30:16] INFO: Connected to orchestrator',
-      '[2024-01-15 10:32:45] INFO: Received training task for job #123',
-      '[2024-01-15 10:35:12] INFO: Training progress: 25%',
-      '[2024-01-15 10:37:33] INFO: Training progress: 50%',
-      '[2024-01-15 10:39:54] INFO: Training progress: 75%',
-      '[2024-01-15 10:42:15] INFO: Training completed successfully',
-      '[2024-01-15 10:42:16] INFO: Submitted model update to orchestrator',
-    ])
+    try {
+      const r = await fetch(`${apiBase}/nodes/${encodeURIComponent(nodeId)}/logs?limit=200`, {
+        headers: authHeaders(),
+        cache: 'no-store',
+      })
+      if (!r.ok) {
+        setLogs([`Failed to fetch logs: ${r.status}`])
+        return
+      }
+      const data = await r.json()
+      const lines: string[] = (data?.logs || []).map((l: any) => {
+        const ts = l.timestamp ? new Date(l.timestamp).toISOString() : ''
+        const lvl = l.level || 'INFO'
+        const msg = l.message || ''
+        return `[${ts}] ${lvl}: ${msg}`
+      })
+      setLogs(lines)
+    } catch (e) {
+      setLogs([`Error loading logs`])
+    }
   }
 
   if (!isConnected) {
@@ -301,38 +341,49 @@ export default function NodesPage() {
                 </div>
 
                 {/* Node Actions */}
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => viewNodeLogs(node.machine_id)}
-                    className="flex-1"
-                  >
-                    <Eye className="w-4 h-4 mr-1" />
-                    Logs
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleNodeAction(node.machine_id, 'restart')}
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleNodeAction(node.machine_id, node.status === 'online' ? 'stop' : 'start')}
-                  >
-                    {node.status === 'online' ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => handleNodeAction(node.machine_id, 'delete')}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => viewNodeLogs(node.machine_id)}
+                      className="flex-1"
+                      disabled={!!control[node.machine_id]?.pending}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      Logs
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleNodeAction(node.machine_id, 'restart')}
+                      disabled={!!control[node.machine_id]?.pending}
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleNodeAction(node.machine_id, node.status === 'online' ? 'stop' : 'start')}
+                      disabled={!!control[node.machine_id]?.pending}
+                    >
+                      {node.status === 'online' ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleNodeAction(node.machine_id, 'delete')}
+                      className="text-red-600 hover:text-red-700"
+                      disabled={!!control[node.machine_id]?.pending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {control[node.machine_id] && (
+                    <div className={`text-xs ${control[node.machine_id].pending ? 'text-gray-600' : control[node.machine_id].ok ? 'text-green-600' : 'text-red-600'}`}>
+                      {control[node.machine_id].pending ? 'Sending command…' : (control[node.machine_id].message || (control[node.machine_id].ok ? 'OK' : 'Failed'))}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ))}

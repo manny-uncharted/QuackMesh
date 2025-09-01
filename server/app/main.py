@@ -42,9 +42,6 @@ app.include_router(training.router, prefix="/api")
 app.include_router(nodes.router, prefix="/api")
 app.include_router(datasets.router, prefix="/api")
 app.include_router(marketplace.router, prefix="/api")
-app.include_router(nodes.router, prefix="/api")
-app.include_router(datasets.router, prefix="/api")
-app.include_router(marketplace.router, prefix="/api")
 app.include_router(ws.router)
 
 # Ensure tables exist (simple bootstrap without Alembic)
@@ -52,14 +49,26 @@ if settings.enable_create_all:
     Base.metadata.create_all(bind=engine)
 
 # Middleware
-origins = [o.strip() for o in (settings.allowed_origins or "").split(",") if o.strip()] or ["*"]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Make CORS configurable via ALLOWED_ORIGINS env (comma-separated). If "*" or unset, allow all (no credentials).
+origins_env = (settings.allowed_origins or "").strip()
+if origins_env and origins_env != "*":
+    origins = [o.strip() for o in origins_env.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Allow all origins for local/dev; credentials disabled when using wildcard
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 @app.middleware("http")

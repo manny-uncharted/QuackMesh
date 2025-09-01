@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { WalletConnect } from '@/components/wallet-connect'
 import { Server, Download, Settings, Play } from 'lucide-react'
+import { apiBase, authHeaders } from '@/lib/api'
 
 export default function RegisterNodePage() {
   const { isConnected, address } = useAccount()
@@ -20,6 +21,53 @@ export default function RegisterNodePage() {
       ram: 16,
     }
   })
+  const [machineId, setMachineId] = useState('')
+  const [regLoading, setRegLoading] = useState(false)
+  const [regError, setRegError] = useState<string | null>(null)
+  const [regSuccess, setRegSuccess] = useState(false)
+
+  // Resolve API base for scripts (ensure absolute URL for remote usage)
+  const resolvedApiBase = typeof window !== 'undefined'
+    ? (apiBase.startsWith('http') ? apiBase : `${window.location.origin}${apiBase}`)
+    : apiBase
+
+  const registerNow = async () => {
+    setRegLoading(true)
+    setRegError(null)
+    try {
+      if (!machineId || isNaN(parseInt(machineId))) {
+        throw new Error('Please enter a valid on-chain Machine ID')
+      }
+      if (!address) {
+        throw new Error('Wallet address not found. Reconnect and try again.')
+      }
+      const specs = JSON.stringify({
+        cpu: Number(nodeConfig.specs.cpu) || 0,
+        gpu: Number(nodeConfig.specs.gpu) || 0,
+        ram_gb: Number(nodeConfig.specs.ram) || 0,
+      })
+      const res = await fetch(`${apiBase}/provider/register`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          machine_id: parseInt(machineId, 10),
+          provider_address: address,
+          specs,
+          endpoint: nodeConfig.endpoint || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `Failed to register (HTTP ${res.status})`)
+      }
+      setRegSuccess(true)
+    } catch (e: any) {
+      setRegError(e?.message || 'Registration failed')
+      setRegSuccess(false)
+    } finally {
+      setRegLoading(false)
+    }
+  }
 
   const generateInstallScript = () => {
     return `#!/bin/bash
@@ -28,19 +76,25 @@ set -e
 
 echo "🦆 Setting up QuackMesh Node..."
 
-# Install dependencies
+# 1) Install dependencies (adjust Python executable if needed)
 pip install -r https://raw.githubusercontent.com/quackmesh/client/main/requirements.txt
 
-# Set environment variables
-export ORCHESTRATOR_API="http://localhost:8000/api"
-export PROVIDER_PRIVATE_KEY="${address}"
+# 2) Orchestrator API and Auth
+export ORCHESTRATOR_API="${resolvedApiBase}"
+export API_KEY="${process.env.NEXT_PUBLIC_API_KEY || ''}"
+
+# 3) Chain and Provider configuration (EDIT THESE VALUES)
+export WEB3_PROVIDER_URL="http://localhost:8545"  # Your node RPC
+export DUCKCHAIN_CHAIN_ID="1337"                  # Chain ID
+export COMPUTE_MARKETPLACE_ADDRESS="<MARKETPLACE_CONTRACT_ADDRESS>"
+export PROVIDER_PRIVATE_KEY="<PASTE_YOUR_PRIVATE_KEY>"  # Never share this
 export PROVIDER_ENDPOINT="${nodeConfig.endpoint}"
 export PRICE_PER_HOUR_DUCK="${parseFloat(nodeConfig.pricePerHour) * 1e18}"
 
-# Register as provider
+# 4) Register provider on-chain and with orchestrator
 python -m quackmesh_client provider
 
-# Start worker server
+# 5) Start worker server
 python -m quackmesh_client worker --host 0.0.0.0 --port 9000
 
 echo "✅ Node registered and running!"
@@ -227,6 +281,7 @@ echo "Your node is now earning $DUCK tokens!"
                       <li>Copy the script above</li>
                       <li>Save it as <code>setup-node.sh</code> on your machine</li>
                       <li>Run <code>chmod +x setup-node.sh && ./setup-node.sh</code></li>
+                      <li>Fill in placeholders like PRIVATE KEY and CONTRACT ADDRESS before running</li>
                       <li>Your node will automatically register and start earning!</li>
                     </ol>
                   </div>
@@ -250,34 +305,56 @@ echo "Your node is now earning $DUCK tokens!"
                   <h2 className="text-2xl font-bold text-gray-900">Start Earning</h2>
                 </div>
                 
-                <div className="text-center space-y-6">
-                  <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                    <Server className="w-10 h-10 text-green-600" />
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                      Your Node is Ready!
-                    </h3>
-                    <p className="text-gray-600">
-                      Your compute node has been registered and is now available for rent.
-                      You'll start earning $DUCK tokens as soon as someone uses your machine for training.
-                    </p>
-                  </div>
-                  
-                  <div className="bg-gradient-to-r from-accent-orange to-accent-cyan rounded-lg p-6 text-white">
-                    <h4 className="font-semibold mb-2">Expected Earnings</h4>
-                    <div className="text-2xl font-bold">
-                      ~{(parseFloat(nodeConfig.pricePerHour) * 24 * 30).toFixed(0)} $DUCK/month
+                <div className="space-y-6">
+                  <div className="bg-gray-50 rounded-lg p-6">
+                    <h3 className="font-semibold text-gray-900 mb-3">Register With Orchestrator</h3>
+                    <p className="text-sm text-gray-600 mb-4">After running the install script, enter your on-chain Machine ID from the listing transaction and register here.</p>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        placeholder="Machine ID"
+                        value={machineId}
+                        onChange={(e) => setMachineId(e.target.value)}
+                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent-orange focus:border-transparent"
+                      />
+                      <Button onClick={registerNow} disabled={regLoading}>
+                        {regLoading ? 'Registering...' : 'Register'}
+                      </Button>
                     </div>
-                    <p className="text-sm opacity-90">
-                      Based on {nodeConfig.pricePerHour} $DUCK/hour × 24h/day × 30 days
-                    </p>
+                    {regError && <p className="text-red-600 text-sm mt-2">{regError}</p>}
+                    {regSuccess && <p className="text-green-700 text-sm mt-2">Registered successfully!</p>}
                   </div>
-                  
-                  <Button size="lg" onClick={() => window.location.href = '/dashboard'}>
-                    Go to Dashboard
-                  </Button>
+
+                  <div className="text-center space-y-6">
+                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                      <Server className="w-10 h-10 text-green-600" />
+                    </div>
+                    
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                        {regSuccess ? 'Your Node is Ready!' : 'Almost there'}
+                      </h3>
+                      <p className="text-gray-600">
+                        {regSuccess
+                          ? "Your compute node has been registered and is now available for rent. You'll start earning $DUCK tokens as soon as someone uses your machine for training."
+                          : 'Complete registration above to finish.'}
+                      </p>
+                    </div>
+                    
+                    <div className="bg-gradient-to-r from-accent-orange to-accent-cyan rounded-lg p-6 text-white">
+                      <h4 className="font-semibold mb-2">Expected Earnings</h4>
+                      <div className="text-2xl font-bold">
+                        ~{(parseFloat(nodeConfig.pricePerHour) * 24 * 30).toFixed(0)} $DUCK/month
+                      </div>
+                      <p className="text-sm opacity-90">
+                        Based on {nodeConfig.pricePerHour} $DUCK/hour × 24h/day × 30 days
+                      </p>
+                    </div>
+                    
+                    <Button size="lg" onClick={() => window.location.href = '/dashboard'} disabled={!regSuccess}>
+                      Go to Dashboard
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
