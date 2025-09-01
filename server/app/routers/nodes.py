@@ -123,7 +123,7 @@ def get_user_nodes(user_address: str = None, _auth: dict = Depends(require_auth(
         return result
 
 @router.post("/ping")
-def node_heartbeat(heartbeat: NodePingRequest, _auth: dict = Depends(require_auth())):
+async def node_heartbeat(heartbeat: NodePingRequest, _auth: dict = Depends(require_auth())):
     """Receive heartbeat from a node (worker NodePingRequest)."""
     with get_session() as session:
         # Verify node exists
@@ -170,7 +170,7 @@ def node_heartbeat(heartbeat: NodePingRequest, _auth: dict = Depends(require_aut
         except Exception:
             pass
         
-        # Broadcast status update to connected clients
+        # Broadcast status update to connected clients (non-blocking)
         asyncio.create_task(manager.broadcast(json.dumps({
             "type": "node_status_update",
             "machine_id": heartbeat.machine_id,
