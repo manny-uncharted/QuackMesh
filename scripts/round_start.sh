@@ -4,7 +4,7 @@ set -euo pipefail
 # Trigger a training round for a job
 # Usage: ./scripts/round_start.sh <job_id> [steps=1] [timeout_s=20]
 
-ORCH=${ORCHESTRATOR_API:-http://localhost:8000/api}
+ORCH=${ORCHESTRATOR_API:-https://8000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai/api}
 API=${API_KEY:-}
 
 if [[ -z "$API" ]]; then echo "ERROR: API_KEY not set" >&2; exit 1; fi

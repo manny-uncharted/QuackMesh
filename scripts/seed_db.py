@@ -2,7 +2,7 @@
 import os
 import requests
 
-API = os.getenv("ORCHESTRATOR_API", "http://localhost:8000/api")
+API = os.getenv("ORCHESTRATOR_API", "https://8000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai/api")
 API_KEY = os.getenv("API_KEY")
 headers = {"X-API-Key": API_KEY} if API_KEY else None
 

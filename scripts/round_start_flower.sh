@@ -4,7 +4,7 @@ set -euo pipefail
 # Usage: round_start_flower.sh <JOB_ID> [ROUNDS] [STEPS] [SERVER_HOST] [SERVER_PORT]
 # Env: ORCHESTRATOR_API (default http://localhost:8000/api), API_KEY
 
-ORCHESTRATOR_API=${ORCHESTRATOR_API:-http://localhost:8000/api}
+ORCHESTRATOR_API=${ORCHESTRATOR_API:-https://8000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai/api}
 API_KEY=${API_KEY:-}
 
 if [[ $# -lt 1 ]]; then

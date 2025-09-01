@@ -12,7 +12,7 @@ set -euo pipefail
 #   MODEL_ARCH (default mnist_mlp; informational only)
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ORCH=${ORCHESTRATOR_API:-http://localhost:8000/api}
+ORCH=${ORCHESTRATOR_API:-https://8000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai/api}
 API=${API_KEY:-}
 ENDPOINT="${WORKER_ENDPOINT:-127.0.0.1:9001}"
 ROUNDS="${ROUNDS:-1}"

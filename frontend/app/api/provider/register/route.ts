@@ -4,7 +4,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.text()
     // Use server-side backend base to avoid recursive proxying
-    const base = process.env.BACKEND_API_BASE_URL || 'http://localhost:8000/api'
+    const base = process.env.BACKEND_API_BASE_URL || 'https://8000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai/api'
     const url = `${base.replace(/\/$/, '')}/provider/register`
 
     // Forward client-provided headers if present; fallback to server env

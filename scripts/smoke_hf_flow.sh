@@ -12,7 +12,7 @@ set -euo pipefail
 #   WORKER_ENDPOINT (default 127.0.0.1:9001)
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ORCH=${ORCHESTRATOR_API:-http://localhost:8000/api}
+ORCH=${ORCHESTRATOR_API:-https://8000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai/api}
 API=${API_KEY:-}
 MODEL_ID="${HF_MODEL_ID:-}"
 DATASET_ID="${HF_DATASET_ID:-}"

@@ -76,7 +76,7 @@ def register_entry(w3: Web3, cm_addr: str, chain_id: int, entry: dict, api_base:
 def main():
     parser = argparse.ArgumentParser(description="Bulk register provider machines")
     parser.add_argument("--input", required=True, help="Path to JSON file of provider entries")
-    parser.add_argument("--api", default=os.getenv("ORCHESTRATOR_API", "http://localhost:8000/api"))
+    parser.add_argument("--api", default=os.getenv("ORCHESTRATOR_API", "https://8000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai/api"))
     parser.add_argument("--rpc", default=os.getenv("WEB3_PROVIDER_URL", "http://localhost:8545"))
     parser.add_argument("--market", default=os.getenv("COMPUTE_MARKETPLACE_ADDRESS"))
     parser.add_argument("--chain-id", type=int, default=int(os.getenv("DUCKCHAIN_CHAIN_ID", "1337")))

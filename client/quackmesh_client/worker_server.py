@@ -26,7 +26,7 @@ import flwr as fl
 
 from .data_pipeline import get_mnist_loaders, get_fake_mnist_loaders, get_text_classification_data
 
-API_BASE = os.getenv("ORCHESTRATOR_API", "http://localhost:8000/api")
+API_BASE = os.getenv("ORCHESTRATOR_API", "https://8000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai/api")
 API_KEY = os.getenv("API_KEY")
 CONTROL_KEY = os.getenv("WORKER_CONTROL_KEY")
 DATA_DIR = os.getenv("DATA_DIR", "/tmp/data")
