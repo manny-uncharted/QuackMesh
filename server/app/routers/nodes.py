@@ -132,7 +132,18 @@ def node_heartbeat(heartbeat: NodePingRequest, _auth: dict = Depends(require_aut
         ).scalar_one_or_none()
         
         if not node:
-            raise HTTPException(status_code=404, detail="Node not found")
+            # Auto-register provider machine on first heartbeat (upsert behavior)
+            try:
+                node = ProviderMachine(
+                    machine_id=heartbeat.machine_id,
+                    provider_address=heartbeat.provider_address,
+                    specs=None,
+                    endpoint=heartbeat.endpoint,
+                )
+                session.add(node)
+            except Exception:
+                # If creation fails, return a clear error
+                raise HTTPException(status_code=400, detail="Failed to register node on heartbeat")
         
         # Create or update heartbeat record
         now = datetime.utcnow()
