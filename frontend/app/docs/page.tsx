@@ -195,7 +195,7 @@ quackmesh-client train --job-id 1 --steps 100`}
                 <div className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">GET</span>
-                    <code className="text-sm font-mono">/api/job/{job_id}/model</code>
+                    <code className="text-sm font-mono">/api/job/{'{'}job_id{'}'}/model</code>
                   </div>
                   <p className="text-sm text-gray-600">Fetch the latest global model weights</p>
                 </div>
@@ -203,7 +203,7 @@ quackmesh-client train --job-id 1 --steps 100`}
                 <div className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded">POST</span>
-                    <code className="text-sm font-mono">/api/job/{job_id}/update</code>
+                    <code className="text-sm font-mono">/api/job/{'{'}job_id{'}'}/update</code>
                   </div>
                   <p className="text-sm text-gray-600 mb-3">Submit model update from training</p>
                   <CodeBlock

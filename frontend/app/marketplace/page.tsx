@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
@@ -43,7 +43,7 @@ interface MarketplaceNode {
   features: string[]
 }
 
-export default function MarketplacePage() {
+function MarketplaceContent() {
   const { isConnected } = useAccount()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -385,5 +385,13 @@ export default function MarketplacePage() {
         />
       </div>
     </div>
+  )
+}
+
+export default function MarketplacePage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <MarketplaceContent />
+    </Suspense>
   )
 }
