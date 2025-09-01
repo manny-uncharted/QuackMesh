@@ -5,8 +5,8 @@
 **Project Name:** QuackMesh  
 **Team:** AI Unchained Builders  
 **Submission Date:** September 1, 2024  
-**Demo URL:** [https://quackmesh.demo](https://quackmesh.demo)  
-**Repository:** [https://github.com/quackmesh/quackmesh](https://github.com/quackmesh/quackmesh)
+**Demo URL:** [https://quackmesh.demo](https://3000-01k42mwc8wv62x7je6az5zqksp.cloudspaces.litng.ai)  
+**Repository:** [https://github.com/quackmesh/quackmesh](https://github.com/manny-uncharted/QuackMesh)
 
 ---
 
