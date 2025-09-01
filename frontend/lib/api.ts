@@ -1,4 +1,8 @@
-export const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
+// Normalize API base: if env is a relative path ensure it starts with '/'. Default to '/api'.
+const rawApiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || '/api').trim()
+export const apiBase = rawApiBase.startsWith('http')
+  ? rawApiBase.replace(/\/$/, '')
+  : ('/' + rawApiBase.replace(/^\/*/, '')).replace(/\/$/, '')
 
 export function authHeaders(extra: HeadersInit = {}): HeadersInit {
   const headers: Record<string, string> = {}

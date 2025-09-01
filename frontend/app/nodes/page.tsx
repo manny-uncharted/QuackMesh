@@ -67,7 +67,7 @@ export default function NodesPage() {
     let cancelled = false
     const load = async () => {
       try {
-        const url = `${apiBase}/nodes${address ? `?user_address=${encodeURIComponent(address)}` : ''}`
+        const url = `${apiBase}/nodes/${address ? `?user_address=${encodeURIComponent(address)}` : ''}`
         const r = await fetch(url, { headers: authHeaders(), cache: 'no-store' })
         if (!r.ok) throw new Error(`Failed to load nodes: ${r.status}`)
         const data = await r.json()
