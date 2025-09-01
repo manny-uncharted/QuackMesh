@@ -54,6 +54,18 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Helper to normalize worker endpoint (accepts host:port or full URL)
+def _normalize_endpoint(ep: str) -> str:
+    try:
+        ep = (ep or "").strip()
+        if not ep:
+            return ep
+        if ep.startswith("http://") or ep.startswith("https://"):
+            return ep
+        return f"http://{ep}"
+    except Exception:
+        return ep
+
 @router.get("/", response_model=List[NodeStatusResponse])
 def get_user_nodes(user_address: str = None, _auth: dict = Depends(require_auth())):
     """Fetch all nodes for a user with current status"""
@@ -228,7 +240,8 @@ def control_node(machine_id: int, control: NodeControlRequest, _auth: dict = Dep
         action_result: Dict | None = None
         if control.action == "start" and node.endpoint:
             try:
-                r = requests.get(f"https://{node.endpoint}/health", timeout=5)
+                ep = _normalize_endpoint(node.endpoint)
+                r = requests.get(f"{ep}/health", timeout=5)
                 action_result = {"reachable": bool(r.ok), "status": r.status_code}
             except Exception as e:
                 action_result = {"reachable": False, "error": str(e)}
@@ -240,8 +253,9 @@ def control_node(machine_id: int, control: NodeControlRequest, _auth: dict = Dep
             if settings.worker_control_key:
                 headers["X-Control-Key"] = settings.worker_control_key
             try:
+                ep = _normalize_endpoint(node.endpoint)
                 resp = requests.post(
-                    f"https://{node.endpoint}/control",
+                    f"{ep}/control",
                     json={"action": control.action, "params": control.params or {}},
                     headers=headers or None,
                     timeout=7,
